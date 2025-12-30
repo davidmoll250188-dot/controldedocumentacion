@@ -14,9 +14,10 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <!-- Gráficos (Recharts) -->
+    <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
     <script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.min.js"></script>
 
-    <!-- FIREBASE (Versión Compat - Estable) -->
+    <!-- FIREBASE (Versión Compat - La más estable) -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -25,10 +26,13 @@
         body { background-color: #f8fafc; font-family: 'Segoe UI', sans-serif; color: #1e293b; }
         .fade-in { animation: fadeIn 0.5s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
         @media print {
             .no-print { display: none !important; }
             .print-only { display: block !important; }
@@ -51,7 +55,7 @@
             appId: "1:759330033292:web:ed0bcf6487779b184e75a9"
         };
 
-        // Inicialización segura (solo una vez)
+        // Inicialización segura
         try {
             if (typeof firebase !== 'undefined' && !firebase.apps.length) {
                 firebase.initializeApp(firebaseConfig);
@@ -104,12 +108,15 @@
             }, []);
 
             if (!isLoaded) {
-                // Fallback visual
+                // Fallback visual: Barra de progreso si falla el gráfico
                 return (
-                    <div className="w-full bg-slate-100 rounded-full h-8 overflow-hidden border border-slate-200 relative mt-8">
-                        <div className="h-8 rounded-full flex items-center justify-center text-xs font-bold text-white transition-all duration-1000" 
-                             style={{ width: `${Math.max(percent, 5)}%`, backgroundColor: color }}>
+                    <div className="w-full h-40 flex flex-col justify-center items-center">
+                        <div className="w-full bg-slate-100 rounded-full h-8 overflow-hidden border border-slate-200 relative">
+                            <div className="h-8 rounded-full flex items-center justify-center text-xs font-bold text-white transition-all duration-1000" 
+                                 style={{ width: `${Math.max(percent, 5)}%`, backgroundColor: color }}>
+                            </div>
                         </div>
+                         <span className="text-3xl font-black text-slate-700 mt-4">{percent}%</span>
                     </div>
                 );
             }
@@ -225,7 +232,7 @@
             const [error, setError] = React.useState("");
             const [isOnline, setIsOnline] = React.useState(navigator.onLine);
             
-            // Navegación
+            // Navegación & Filtros
             const [view, setView] = React.useState('dashboard'); 
             const [selectedTeacherId, setSelectedTeacherId] = React.useState("");
             const [teacherViewMode, setTeacherViewMode] = React.useState('stats'); 
@@ -542,7 +549,8 @@
                                         </div>
                                     ) : (
                                         <>
-                                            <div className="flex p-1 bg-white border border-slate-200 rounded-xl w-full md:w-fit mx-auto mb-8 shadow-sm">
+                                            {/* TABS INTERNOS */}
+                                            <div className="flex p-1 bg-white border rounded-lg w-full md:w-fit mx-auto shadow-sm">
                                                 <button onClick={() => setTeacherViewMode('stats')} className={`flex-1 px-6 py-2 rounded font-bold text-sm transition flex items-center justify-center ${teacherViewMode === 'stats' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}><span className="w-4 h-4 mr-2"><Icons.Chart/></span> Gráficos</button>
                                                 <button onClick={() => setTeacherViewMode('check')} className={`flex-1 px-6 py-2 rounded font-bold text-sm transition flex items-center justify-center ${teacherViewMode === 'check' ? 'bg-blue-600 text-white shadow' : 'text-slate-500 hover:bg-slate-50'}`}><span className="w-4 h-4 mr-2"><Icons.List/></span> Checklist</button>
                                             </div>
