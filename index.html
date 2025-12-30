@@ -5,33 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Seguimiento Docente</title>
     
-    <!-- LIBRERÍAS (Carga rápida) -->
+    <!-- 1. LIBRERÍAS (Carga rápida) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
-    <!-- Recharts CDN Seguro -->
     <script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- FIREBASE (Versión Compatible) -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+    <!-- 2. FIREBASE (Versión Compat - Estable) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 
     <style>
-        body { background-color: #f8fafc; font-family: sans-serif; }
-        .fade-in { animation: fadeIn 0.5s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        /* Ocultar al imprimir */
-        @media print { .no-print { display: none !important; } }
+        body { background-color: #f8fafc; font-family: 'Segoe UI', sans-serif; }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        @media print { .no-print { display: none !important; } .print-only { display: block !important; } .card { break-inside: avoid; } }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        // --- 1. CONFIGURACIÓN ROBUSTA DE FIREBASE ---
+        // --- 1. CONFIGURACIÓN DE FIREBASE ---
         const firebaseConfig = {
             apiKey: "AIzaSyBZBFUrU6rAAcpDXKetsH3eT2XyZQ2e3Rg",
             authDomain: "control-docentes.firebaseapp.com",
@@ -41,432 +43,593 @@
             appId: "1:759330033292:web:ed0bcf6487779b184e75a9"
         };
 
-        // Intentar inicializar Firebase
-        let db = null;
-        let auth = null;
-        let firebaseReady = false;
-
-        try {
-            if (typeof firebase !== 'undefined' && !firebase.apps.length) {
-                firebase.initializeApp(firebaseConfig);
-                db = firebase.firestore();
-                auth = firebase.auth();
-                firebaseReady = true;
-            }
-        } catch (e) {
-            console.error("Error inicializando Firebase:", e);
+        // Inicializar solo si no existe
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
         }
 
-        // --- 2. ICONOS SVG ---
-        const Icon = ({ d, className, ...props }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>{Array.isArray(d)?d.map((p,i)=><path key={i} d={p}/>):<path d={d}/>}</svg>;
-        
-        const Icons = {
-            File: (p) => <Icon d={["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z", "M14 2v6h6", "M16 13H8", "M16 17H8", "M10 9H8"]} {...p}/>,
-            Chart: (p) => <Icon d={["M21.21 15.89A10 10 0 1 1 8 2.83", "M22 12A10 10 0 0 0 12 2v10z"]} {...p}/>,
-            Users: (p) => <Icon d={["M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2", "M16 3.13a4 4 0 0 1 0 7.75", "M23 21v-2a4 4 0 0 0-3-3.87"]} {...p}><circle cx="9" cy="7" r="4"/></Icon>,
-            Check: (p) => <Icon d={["M20 6 9 17l-5-5"]} {...p}/>,
-            Trash: (p) => <Icon d={["M3 6h18", "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6", "M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"]} {...p}/>,
-            Refresh: (p) => <Icon d={["M23 4v6h-6", "M1 20v-6h6", "M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"]} {...p}/>,
-            Wifi: (p) => <Icon d={["M5 12.55a11 11 0 0 1 14.08 0", "M1.42 9a16 16 0 0 1 21.16 0", "M8.53 16.11a6 6 0 0 1 6.95 0", "M12 20h.01"]} {...p}/>,
-            WifiOff: (p) => <Icon d={["M1 1l22 22", "M16.72 11.06A10.94 10.94 0 0 1 19 12.55", "M5 12.55a10.94 10.94 0 0 1 5.17-2.39", "M8.53 16.11a6 6 0 0 1 6.95 0", "M12 20h.01"]} {...p}/>,
-            Menu: (p) => <Icon d={["M4 12h16", "M4 6h16", "M4 18h16"]} {...p}/>,
-            Print: (p) => <Icon d={["M6 9V2h12v7", "M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2", "M6 14h12v8H6z"]} {...p}/>
-        };
+        // Referencias Globales Directas (Corrección clave para que funcionen los botones)
+        const db = firebase.firestore();
+        const auth = firebase.auth();
 
-        // --- 3. DATOS Y LÓGICA DE NEGOCIO ---
-        const ROLES_KEYS = { TUTOR: "Docente Tutor", AREA: "Docente Área a Cargo", REGENCIA: "Regencia" };
-        const DOCS_TUTOR = ["Carátula", "Registro de estudiantes", "Asistencia", "Llenado de: (competencias, capacidades, desempeños y criterios)", "Llenado de conclusiones descriptivas", "Llenado de comportamiento", "Llenado de apreciación del tutor", "Formato Oficial de Notas (SIAGIE)", "Conclusiones Descriptivas (SIAGIE)", "Comentario General", "Determinación de Primeros Puestos", "Registro de HSE y FR", "Informe de HSE y FR", "Informe de Nivel de Logro de Competencia", "Inventario", "Informe de Estudiantes con R.R.", "Informe de Estudiantes con P.G.", "Informe de Tutoría"];
-        const DOCS_AREA = ["Llenado de: (competencias, capacidades, desempeños y criterios)", "Llenado de conclusiones descriptivas", "Formato Oficial de Notas (SIAGIE)", "Conclusiones Descriptivas (SIAGIE)"];
-        const DOCS_REGENCIA = ["Llenado de comportamiento", "Inventario"];
-        
-        const REGLAS = {
-            [ROLES_KEYS.TUTOR]: DOCS_TUTOR,
-            [ROLES_KEYS.AREA]: DOCS_AREA,
-            [ROLES_KEYS.REGENCIA]: DOCS_REGENCIA
+        // --- 2. ICONOS SVG ---
+        const Icon = ({ d, className, ...props }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
+                {Array.isArray(d) ? d.map((path, i) => <path key={i} d={path} />) : <path d={d} />}
+            </svg>
+        );
+
+        const Icons = {
+            FileCheck: (p) => <Icon d={["M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z", "M14 2v6h6", "m9 15 2 2 4-4"]} {...p} />,
+            PieChart: (p) => <Icon d={["M21.21 15.89A10 10 0 1 1 8 2.83", "M22 12A10 10 0 0 0 12 2v10z"]} {...p} />,
+            Users: (p) => <Icon d={["M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", "M16 3.13a4 4 0 0 1 0 7.75", "M22 21v-2a4 4 0 0 0-3-3.87"]} {...p}><circle cx="9" cy="7" r="4"/></Icon>,
+            Printer: (p) => <Icon d={["M6 9V2h12v7", "M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2", "M6 14h12v8H6z"]} {...p} />,
+            Menu: (p) => <Icon d={["M4 12h16", "M4 6h16", "M4 18h16"]} {...p} />,
+            X: (p) => <Icon d={["M18 6 6 18", "M6 6 18 18"]} {...p} />,
+            Plus: (p) => <Icon d={["M5 12h14", "M12 5v14"]} {...p} />,
+            FileSpreadsheet: (p) => <Icon d={["M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z", "M14 2v6h6", "M8 13h2", "M8 17h2", "M14 13h2", "M14 17h2"]} {...p} />,
+            Upload: (p) => <Icon d={["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", "M17 8l-5-5-5 5", "M12 3v12"]} {...p} />,
+            Trash2: (p) => <Icon d={["M3 6h18", "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6", "M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"]} {...p} />,
+            CheckSquare: (p) => <Icon d={["M9 11l3 3L22 4", "M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"]} {...p} />,
+            AlertCircle: (p) => <Icon d={["M12 8v4", "M12 16h.01"]} {...p}><circle cx="12" cy="12" r="10"/></Icon>,
+            ChevronDown: (p) => <Icon d={["M6 9l6 6 6-6"]} {...p} />,
+            FileText: (p) => <Icon d={["M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z", "M14 2v6h6", "M16 13H8", "M16 17H8", "M10 9H8"]} {...p} />,
+            ListChecks: (p) => <Icon d={["M10 6h11", "M10 12h11", "M10 18h11", "M4 6h1", "M4 12h1", "M4 18h1"]} {...p} />,
+            CheckCircle2: (p) => <Icon d={["M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z", "m9 12 2 2 4-4"]} {...p} />,
+            XCircle: (p) => <Icon d={["M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z", "m15 9-6 6", "m9 9 6 6"]} {...p} />,
+            Cloud: (p) => <Icon d={["M17.5 19c0-3.037-2.463-5.5-5.5-5.5S6.5 15.963 6.5 19", "M17.5 19H19a5 5 0 0 0 0-10 7.5 7.5 0 0 0-13 3 5 5 0 0 0 2 9h1.5"]} {...p} />,
+            Loader2: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>,
+            RefreshCcw: (p) => <Icon d={["M21 2v6h-6", "M3 12a9 9 0 0 1 15-6.7L21 8", "M3 22v-6h6", "M21 12a9 9 0 0 1-15 6.7L3 16"]} {...p} />,
+            Filter: (p) => <Icon d={["M22 3H2l8 9.46V19l4 2v-8.54L22 3z"]} {...p} />,
+            Wifi: (p) => <Icon d={["M5 12.55a11 11 0 0 1 14.08 0", "M1.42 9a16 16 0 0 1 21.16 0", "M8.53 16.11a6 6 0 0 1 6.95 0", "M12 20h.01"]} {...p} />,
+            WifiOff: (p) => <Icon d={["M1 1l22 22", "M16.72 11.06A10.94 10.94 0 0 1 19 12.55", "M5 12.55a10.94 10.94 0 0 1 5.17-2.39", "M10.71 5.05A16 16 0 0 1 22.58 9", "M1.42 9a15.91 15.91 0 0 1 4.7-2.88", "M8.53 16.11a6 6 0 0 1 6.95 0", "M12 20h.01"]} {...p} />
         };
 
         const { useState, useEffect } = React;
-        // Acceso seguro a Recharts global
-        const RechartsLib = window.Recharts || { PieChart: () => null, Pie: () => null, Cell: () => null, ResponsiveContainer: () => null, Tooltip: () => null };
-        const { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } = RechartsLib;
+        const RechartsObj = window.Recharts || {};
+        const { PieChart, Pie, Cell, ResponsiveContainer } = RechartsObj;
 
-        // --- 4. COMPONENTE PRINCIPAL ---
+        // --- 3. DATOS Y CONSTANTES ---
+        const ROLES_KEYS = { TUTOR: "Docente Tutor", AREA: "Docente Área a Cargo", REGENCIA: "Regencia" };
+        
+        const GRADOS_TUTORIA = [
+            "Inicial 3", "Inicial 4", "Inicial 5", 
+            "Primero P", "Segundo P", "Tercero P", "Cuarto P", "Quinto P", "Sexto P", 
+            "Primero S", "Segundo S", "Tercero S", "Cuarto S", "Quinto S"
+        ];
+        
+        const AREAS_CURRICULARES = [
+            "Comunicación", "Matemática", "Religión", "Ciencias Sociales", "Personal Social", 
+            "Inglés", "EPT", "Ciencia y Tecnología", "Arte", "DPCYC", "Ed. Física"
+        ];
+
+        const DOCS_POSIBLES = [
+            "Carátula", "Registro de estudiantes", "Asistencia", "Llenado de: (competencias, capacidades, desempeños y criterios)", 
+            "Llenado de conclusiones descriptivas", "Llenado de comportamiento", "Llenado de apreciación del tutor",
+            "Formato Oficial de Notas (SIAGIE)", "Conclusiones Descriptivas (SIAGIE)", "Comentario General", "Determinación de Primeros Puestos", 
+            "Registro de HSE y FR", "Informe de HSE y FR", "Informe de Nivel de Logro de Competencia", "Inventario", 
+            "Informe de Estudiantes con R.R.", "Informe de Estudiantes con P.G.", "Informe de Tutoría"
+        ];
+        
+        const REGLAS_ASIGNACION = {
+            [ROLES_KEYS.TUTOR]: { docs: DOCS_POSIBLES },
+            [ROLES_KEYS.AREA]: { docs: ["Llenado de: (competencias, capacidades, desempeños y criterios)", "Llenado de conclusiones descriptivas", "Formato Oficial de Notas (SIAGIE)", "Conclusiones Descriptivas (SIAGIE)"] },
+            [ROLES_KEYS.REGENCIA]: { docs: ["Llenado de comportamiento", "Inventario"] }
+        };
+
+        const Card = ({ children, className = "" }) => <div className={`bg-white rounded-xl shadow-sm border border-slate-200 ${className}`}>{children}</div>;
+        const Badge = ({ children, type = "neutral" }) => <span className={`px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 mr-1`}>{children}</span>;
+
+        // --- 4. COMPONENTES VISUALES ---
+        
+        const ChecklistGroup = ({ title, items, docente, requiredItems, onToggle, onUpdateObs, onUpdatePercent }) => {
+            const relevantItems = items.filter(item => requiredItems.includes(item));
+            if (!relevantItems.length) return null;
+            return (
+                <div className="mb-8">
+                    <h4 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center border-b pb-2">
+                        <Icons.FileText className="w-4 h-4 mr-2 text-blue-500"/>{title}
+                    </h4>
+                    <div className="space-y-4">
+                        {relevantItems.map((docName, idx) => {
+                            const docData = docente.documentos?.[docName] || { entregado: false, obs: "", porcentaje: 0 };
+                            const isChecked = docData.entregado;
+                            const hasObs = docData.obs && docData.obs.length > 0;
+                            const currentPercent = docData.porcentaje !== undefined ? docData.porcentaje : (isChecked ? 100 : 0);
+                            return (
+                                <div key={idx} className={`rounded-lg border-2 transition-all duration-200 ${isChecked ? 'bg-emerald-50/30 border-emerald-400' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
+                                    <div className="flex flex-col md:flex-row md:items-start p-4 gap-4">
+                                        <div className="flex items-start flex-1">
+                                            <div onClick={() => onToggle(docente.id, docName)} className={`mt-1 flex-shrink-0 cursor-pointer w-8 h-8 rounded-full flex items-center justify-center mr-4 transition-all shadow-sm ${isChecked ? 'bg-emerald-500 text-white scale-110' : 'bg-slate-100 text-slate-300 border border-slate-300 hover:bg-white'}`}>
+                                                {isChecked && <Icons.CheckSquare className="w-5 h-5" />}
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="cursor-pointer font-medium text-slate-800" onClick={() => onToggle(docente.id, docName)}>{docName}</div>
+                                                {(isChecked && hasObs) && (
+                                                    <div className="mt-2 flex items-center animate-fade-in bg-white/50 p-2 rounded-lg">
+                                                        <span className="text-xs font-bold text-slate-500 mr-2 uppercase">Calif:</span>
+                                                        <input type="range" min="0" max="100" value={currentPercent} onChange={(e) => onUpdatePercent(docente.id, docName, parseInt(e.target.value))} className="w-32 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 mr-2" />
+                                                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${currentPercent < 100 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{currentPercent}%</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="w-full md:w-1/2 pl-12 md:pl-0 relative">
+                                            <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1 uppercase tracking-wider">Observaciones {isChecked && "(Habilita %)"}</label>
+                                            <textarea rows="2" placeholder="Agregar observación..." className={`text-sm px-3 py-2 rounded-md border outline-none transition-all w-full focus:border-blue-500 shadow-sm resize-y ${hasObs ? 'bg-amber-50 border-amber-300 text-amber-900 font-medium' : 'bg-slate-50 border-slate-200 text-slate-600'}`} value={docData.obs || ""} onChange={(e) => onUpdateObs(docente.id, docName, e.target.value)} />
+                                            {hasObs && <div className="absolute top-0 right-0"><Icons.AlertCircle className="w-4 h-4 text-amber-500" /></div>}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            );
+        };
+
+        const ChartCard = ({ title, percent, color }) => {
+            const data = [{ name: 'Completado', value: percent }, { name: 'Pendiente', value: 100 - percent }];
+            if (!PieChart || !ResponsiveContainer) return <Card className="p-6 flex flex-col items-center justify-center h-48"><h3 className="text-sm font-bold text-slate-500 mb-4">{title}</h3><div className="text-4xl font-black text-slate-700">{percent}%</div></Card>;
+            return (
+                <Card className="p-6 flex flex-col items-center justify-center overflow-hidden">
+                    <h3 className="text-sm font-bold text-slate-500 mb-4 z-10">{title}</h3>
+                    <div className="h-64 w-full relative z-10">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart><Pie data={data} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" startAngle={90} endAngle={-270} stroke="none"><Cell fill={color} /><Cell fill="#f1f5f9" /></Pie></PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="text-4xl font-black text-slate-700">{percent}%</span></div>
+                    </div>
+                </Card>
+            );
+        };
+
+        const DocumentStatusGrid = ({ items, docente, requiredItems }) => {
+            const relevantItems = items.filter(item => requiredItems.includes(item));
+            if (!relevantItems.length) return null;
+            return (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {relevantItems.map((doc, idx) => {
+                        const docData = docente.documentos?.[doc] || {};
+                        const isDone = docData.entregado;
+                        const hasObs = docData.obs && docData.obs.length > 0;
+                        const percent = docData.porcentaje !== undefined ? docData.porcentaje : (isDone ? 100 : 0);
+                        return (
+                            <div key={idx} className={`relative p-3 rounded-lg border flex flex-col items-center justify-center text-center min-h-[140px] transition-all ${isDone ? (percent < 100 ? 'bg-amber-50 border-amber-300' : 'bg-emerald-50 border-emerald-200') : 'bg-white border-slate-200 opacity-80'}`}>
+                                {hasObs && <div className="absolute top-1 right-1 animate-pulse"><Icons.AlertCircle className="w-5 h-5 text-amber-600" /></div>}
+                                <div className="mb-2 relative">
+                                    <div className={`rounded-full p-2 ${isDone ? (percent < 100 ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600') : 'bg-slate-100 text-slate-300'}`}>{isDone ? <Icons.CheckCircle2 className="w-6 h-6"/> : <Icons.XCircle className="w-6 h-6"/>}</div>
+                                    {isDone && <div className="absolute -bottom-1 -right-2 bg-slate-800 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{percent}%</div>}
+                                </div>
+                                <span className={`text-xs font-semibold mb-2 ${isDone ? 'text-slate-800' : 'text-slate-400'}`}>{doc}</span>
+                                {hasObs && <div className="mt-auto w-full"><div className="text-[10px] text-amber-900 bg-amber-100 p-2 rounded border border-amber-200 text-left line-clamp-3 italic">"{docData.obs}"</div></div>}
+                            </div>
+                        )
+                    })}
+                </div>
+            );
+        };
+
+        // --- 5. APLICACIÓN PRINCIPAL ---
         const App = () => {
-            // Estados de la App
-            const [modoLocal, setModoLocal] = useState(false);
+            const [user, setUser] = useState(null);
             const [docentes, setDocentes] = useState([]);
-            const [loading, setLoading] = useState(true);
+            const [isLoading, setIsLoading] = useState(true);
             const [errorMsg, setErrorMsg] = useState("");
+            const [isOnline, setIsOnline] = useState(navigator.onLine);
             
-            // Navegación
-            const [tab, setTab] = useState('dash');
-            const [selectedId, setSelectedId] = useState("");
-            const [selectedRoleFilter, setSelectedRoleFilter] = useState("ALL");
-            
-            // Formularios
-            const [newDocente, setNewDocente] = useState({ nombre: "", roles: [], detalle: "" });
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [selectedDashboardId, setSelectedDashboardId] = useState("");
+            const [teacherViewMode, setTeacherViewMode] = useState('checklist');
+            const [showImport, setShowImport] = useState(false);
             const [importText, setImportText] = useState("");
-            
-            // Auxiliares
-            const [showMenu, setShowMenu] = useState(false);
+            const [sidebarOpen, setSidebarOpen] = useState(false);
+            const [selectedRoleView, setSelectedRoleView] = useState("ALL");
+            const [roleSelectionRequired, setRoleSelectionRequired] = useState(false);
 
-            // --- INICIALIZACIÓN (HÍBRIDA) ---
+            // Estados para el formulario de registro multi-rol
+            const [newDocente, setNewDocente] = useState({ nombre: "" });
+            const [selectedRoles, setSelectedRoles] = useState([]);
+            const [detailInputs, setDetailInputs] = useState({ tutorGrade: "", areaName: "", regenciaDesc: "" });
+
+            // Inicialización
             useEffect(() => {
-                const iniciar = async () => {
-                    // Timer de seguridad: Si en 5s no carga, mostramos opción local
-                    const timer = setTimeout(() => {
-                        if (loading && !modoLocal) {
-                            setErrorMsg("La conexión está tardando. Puedes usar el modo local.");
-                            setLoading(false); // Deja de girar
-                        }
-                    }, 5000);
+                const handleOnline = () => setIsOnline(true);
+                const handleOffline = () => setIsOnline(false);
+                window.addEventListener('online', handleOnline);
+                window.addEventListener('offline', handleOffline);
 
-                    if (firebaseReady) {
-                        try {
-                            await auth.signInAnonymously();
-                            // Escuchar cambios en la DB
-                            db.collection('docentes').onSnapshot((snap) => {
-                                const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                                setDocentes(data.sort((a,b) => a.nombre.localeCompare(b.nombre)));
-                                setLoading(false);
-                                setErrorMsg("");
-                            }, (err) => {
-                                console.error(err);
-                                setErrorMsg("Error de conexión: " + err.message);
-                                setLoading(false);
-                            });
-                        } catch (err) {
-                            console.error("Auth error", err);
-                            setErrorMsg("No se pudo autenticar.");
-                            setLoading(false);
-                        }
-                    } else {
-                        // Si firebase no está disponible globalmente, permitir fallback manual o esperar
+                // Autenticación anónima
+                auth.signInAnonymously().catch(err => {
+                    console.error("Auth Error:", err);
+                    setErrorMsg("Error de autenticación: " + err.message);
+                    setIsLoading(false);
+                });
+
+                const unsubscribeAuth = auth.onAuthStateChanged((u) => {
+                    setUser(u);
+                    if (u) setIsLoading(false);
+                });
+
+                // Escuchar datos de Firestore en tiempo real
+                const unsubscribeDocs = db.collection('docentes').onSnapshot(
+                    (snapshot) => {
+                        const docsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        docsData.sort((a, b) => a.nombre.localeCompare(b.nombre));
+                        setDocentes(docsData);
+                        setIsLoading(false);
+                        setErrorMsg("");
+                    }, 
+                    (err) => {
+                        console.error("Firestore Error:", err);
+                        if (err.code === 'permission-denied') setErrorMsg("Permiso denegado. Revisa reglas.");
+                        else setErrorMsg("Error datos: " + err.message);
+                        setIsLoading(false);
                     }
-                    return () => clearTimeout(timer);
+                );
+
+                // Timeout de seguridad
+                const timer = setTimeout(() => {
+                    setIsLoading((prev) => {
+                        if (prev) {
+                            setErrorMsg("La conexión está tardando. Revisa tu internet.");
+                            return false;
+                        }
+                        return prev;
+                    });
+                }, 8000);
+
+                return () => {
+                    clearTimeout(timer);
+                    window.removeEventListener('online', handleOnline);
+                    window.removeEventListener('offline', handleOffline);
+                    unsubscribeAuth();
+                    unsubscribeDocs();
                 };
-                iniciar();
             }, []);
 
-            // --- FUNCIONES CRUD (HÍBRIDAS) ---
-            const guardarDocente = async (docente) => {
-                const nuevo = { ...docente, createdAt: new Date().toISOString(), documentos: {} };
-                if (modoLocal) {
-                    const localData = [...docentes, { ...nuevo, id: "loc_" + Date.now() }];
-                    setDocentes(localData);
-                    localStorage.setItem('docentes_backup', JSON.stringify(localData));
-                    alert("Guardado en Navegador (Modo Local)");
-                } else if (db) {
-                    await db.collection('docentes').add(nuevo);
-                    alert("Guardado en Nube");
-                }
+            // --- LÓGICA ---
+            const getTeacherRoles = (d) => {
+                if (!d) return [];
+                if (Array.isArray(d.roles) && d.roles.length > 0) return d.roles;
+                if (d.rol) return [d.rol]; 
+                return [];
             };
 
-            const actualizarDocente = async (id, data) => {
-                if (modoLocal) {
-                    const nuevos = docentes.map(d => d.id === id ? { ...d, ...data } : d);
-                    setDocentes(nuevos);
-                    localStorage.setItem('docentes_backup', JSON.stringify(nuevos));
-                } else if (db) {
-                    await db.collection('docentes').doc(id).update(data);
-                }
-            };
-
-            const eliminarDocente = async (id) => {
-                if (!confirm("¿Eliminar?")) return;
-                if (modoLocal) {
-                    const nuevos = docentes.filter(d => d.id !== id);
-                    setDocentes(nuevos);
-                    localStorage.setItem('docentes_backup', JSON.stringify(nuevos));
-                } else if (db) {
-                    await db.collection('docentes').doc(id).delete();
-                }
-                if (selectedId === id) setSelectedId("");
-            };
-
-            // --- MANEJADORES DE INTERFAZ ---
-            const handleAdd = (e) => {
-                e.preventDefault();
-                if (!newDocente.nombre || !newDocente.roles.length) return alert("Faltan datos");
-                // Compatibilidad: 'rol' principal es el primero
-                guardarDocente({ ...newDocente, rol: newDocente.roles[0] });
-                setNewDocente({ nombre: "", roles: [], detalle: "" });
-            };
-
-            const toggleRole = (role) => {
-                setNewDocente(prev => {
-                    const roles = prev.roles.includes(role) ? prev.roles.filter(r => r !== role) : [...prev.roles, role];
-                    return { ...prev, roles };
-                });
-            };
-
-            const activarModoLocal = () => {
-                setModoLocal(true);
-                setLoading(false);
-                setErrorMsg("");
-                const saved = localStorage.getItem('docentes_backup');
-                if (saved) setDocentes(JSON.parse(saved));
-            };
-
-            // --- LÓGICA DE DOCUMENTOS ---
-            const getDocsRequeridos = (d, filtro = "ALL") => {
-                if(!d) return [];
-                const roles = d.roles || [d.rol]; // Compatibilidad
-                let docs = new Set();
+            const getRequeridos = (d, roleFilter = "ALL") => {
+                if (!d) return [];
+                const roles = getTeacherRoles(d);
+                let allDocs = new Set();
                 roles.forEach(r => {
-                    if (filtro === "ALL" || filtro === r) {
-                        (REGLAS[r] || []).forEach(doc => docs.add(doc));
+                    if (roleFilter === "ALL" || roleFilter === r) {
+                        const docsForRole = REGLAS_ASIGNACION[r]?.docs || [];
+                        docsForRole.forEach(doc => allDocs.add(doc));
                     }
                 });
-                return Array.from(docs);
+                return Array.from(allDocs);
             };
 
-            const calcProgreso = (d, filtro) => {
-                const req = getDocsRequeridos(d, filtro);
-                if (!req.length) return 0;
-                let sum = 0;
-                req.forEach(doc => {
-                    const info = d.documentos?.[doc];
-                    if (info?.entregado) sum += (info.porcentaje ?? 100);
+            const calcularProgreso = (d, roleFilter = "ALL") => {
+                const requiredDocs = getRequeridos(d, roleFilter);
+                if (!requiredDocs.length) return 0;
+                let sumPercentages = 0;
+                requiredDocs.forEach(docName => {
+                    const data = d.documentos?.[docName];
+                    if (data && data.entregado) {
+                        sumPercentages += (data.porcentaje !== undefined ? data.porcentaje : 100);
+                    }
                 });
-                return Math.round(sum / req.length);
+                return Math.round(sumPercentages / requiredDocs.length);
             };
 
-            const toggleDoc = (id, docName) => {
+            // --- ACCIONES ---
+            const handleRefresh = () => window.location.reload();
+
+            const handleSelectTeacher = (e) => {
+                const id = e.target.value;
+                setSelectedDashboardId(id);
+                setTeacherViewMode('graficos');
+                const doc = docentes.find(d => String(d.id) === String(id));
+                if (doc) {
+                    const roles = getTeacherRoles(doc);
+                    if (roles.length > 1) {
+                        setRoleSelectionRequired(true);
+                        setSelectedRoleView("ALL");
+                    } else {
+                        setRoleSelectionRequired(false);
+                        setSelectedRoleView("ALL");
+                    }
+                } else {
+                    setRoleSelectionRequired(false);
+                }
+            };
+
+            const selectRoleContext = (role) => {
+                setSelectedRoleView(role);
+                setRoleSelectionRequired(false);
+            };
+
+            const toggleNewRole = (role) => {
+                if (selectedRoles.includes(role)) {
+                    setSelectedRoles(selectedRoles.filter(r => r !== role));
+                } else {
+                    setSelectedRoles([...selectedRoles, role]);
+                }
+            };
+
+            const handleAddDocente = async (e) => {
+                e.preventDefault();
+                if (!newDocente.nombre.trim()) return alert("Nombre requerido");
+                if (selectedRoles.length === 0) return alert("Seleccione al menos un rol");
+
+                // Construir detalle combinado
+                let detallesStr = [];
+                if (selectedRoles.includes(ROLES_KEYS.TUTOR) && detailInputs.tutorGrade) detallesStr.push(`Tutor: ${detailInputs.tutorGrade}`);
+                if (selectedRoles.includes(ROLES_KEYS.AREA) && detailInputs.areaName) detallesStr.push(`Área: ${detailInputs.areaName}`);
+                if (selectedRoles.includes(ROLES_KEYS.REGENCIA) && detailInputs.regenciaDesc) detallesStr.push(`Regencia: ${detailInputs.regenciaDesc}`);
+                
+                const detalleFinal = detallesStr.join(" | ");
+
+                try {
+                    await db.collection('docentes').add({
+                        nombre: newDocente.nombre, 
+                        roles: selectedRoles, 
+                        rol: selectedRoles[0], // compatibilidad
+                        detalle: detalleFinal, 
+                        documentos: {}, 
+                        createdAt: new Date().toISOString()
+                    });
+                    setNewDocente({ nombre: "" });
+                    setSelectedRoles([]);
+                    setDetailInputs({ tutorGrade: "", areaName: "", regenciaDesc: "" });
+                    alert("Docente registrado.");
+                } catch(e) { console.error(e); alert("Error al guardar"); }
+            };
+
+            const handleImportarDocentes = async () => {
+                if (!importText.trim()) return;
+                const lineas = importText.split('\n');
+                let count = 0;
+                
+                for (let linea of lineas) {
+                    const parts = linea.split(/\t|,/);
+                    if (parts.length >= 1 && parts[0].trim()) {
+                        let roles = [ROLES_KEYS.TUTOR]; 
+                        const rStr = parts[1]?.toLowerCase() || "";
+                        if (rStr.includes("área") || rStr.includes("area")) roles = [ROLES_KEYS.AREA];
+                        if (rStr.includes("regencia")) roles = [ROLES_KEYS.REGENCIA];
+                        
+                        await db.collection('docentes').add({
+                            nombre: parts[0].trim(), roles: roles, rol: roles[0],
+                            detalle: parts[2]?.trim() || "Sin asignar", documentos: {}, createdAt: new Date().toISOString()
+                        });
+                        count++;
+                    }
+                }
+                setImportText(""); setShowImport(false);
+                alert(`Importados ${count} registros.`);
+            };
+
+            const updateDocenteData = async (id, newData) => {
+                try { await db.collection('docentes').doc(id).update({ documentos: newData }); } catch(e) { console.error(e); }
+            };
+
+            const toggleDocumento = (id, docName) => {
                 const doc = docentes.find(d => d.id === id);
                 const current = doc.documentos?.[docName] || { entregado: false, obs: "", porcentaje: 0 };
                 const newState = !current.entregado;
-                const newData = { ...doc.documentos, [docName]: { ...current, entregado: newState, porcentaje: newState ? 100 : 0 } };
-                actualizarDocente(id, { documentos: newData });
+                updateDocenteData(id, { ...doc.documentos, [docName]: { ...current, entregado: newState, porcentaje: newState ? 100 : 0 } });
             };
 
-            const updateMeta = (id, docName, field, val) => {
+            const onUpdateObs = (id, docName, val) => {
                 const doc = docentes.find(d => d.id === id);
                 const current = doc.documentos?.[docName] || { entregado: false, obs: "", porcentaje: 0 };
-                const newData = { ...doc.documentos, [docName]: { ...current, [field]: val } };
-                actualizarDocente(id, { documentos: newData });
+                updateDocenteData(id, { ...doc.documentos, [docName]: { ...current, obs: val } });
             };
 
-            // --- PDF ---
-            const printPDF = () => {
-                window.print();
+            const onUpdatePercent = (id, docName, val) => {
+                const doc = docentes.find(d => d.id === id);
+                const current = doc.documentos?.[docName] || { entregado: false, obs: "", porcentaje: 0 };
+                updateDocenteData(id, { ...doc.documentos, [docName]: { ...current, porcentaje: val } });
             };
 
-            // --- PANTALLA DE CARGA / ERROR ---
-            if (loading) {
-                return (
-                    <div className="flex h-screen items-center justify-center flex-col bg-slate-100 p-4 text-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-                        <p className="text-lg font-bold text-slate-700">Conectando Sistema...</p>
-                        {errorMsg && (
-                            <div className="mt-6 bg-white p-4 rounded shadow-lg max-w-sm">
-                                <p className="text-red-500 text-sm mb-4">{errorMsg}</p>
-                                <button onClick={activarModoLocal} className="w-full bg-slate-700 text-white py-2 rounded font-bold hover:bg-slate-800">
-                                    Usar en MODO LOCAL (Sin Internet)
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                );
-            }
+            const handleDeleteDocente = async (id) => {
+                if(confirm("¿Eliminar registro?")) {
+                    await db.collection('docentes').doc(id).delete();
+                    if(selectedDashboardId === id) setSelectedDashboardId("");
+                }
+            };
 
-            // --- RENDER PRINCIPAL ---
-            const docenteSel = docentes.find(d => String(d.id) === String(selectedId));
-            const rolesActivos = docenteSel ? (docenteSel.roles || [docenteSel.rol]) : [];
-            const progreso = docenteSel ? calcProgreso(docenteSel, selectedRoleFilter) : 0;
+            const generatePDFReport = () => {
+                const w = window.open('', '_blank');
+                let html = `<html><head><title>Reporte Docente</title><style>body{font-family:'Segoe UI',sans-serif;padding:40px;color:#333;}h1{color:#1e40af;border-bottom:2px solid #1e40af;padding-bottom:10px;}.card{border:1px solid #e2e8f0;margin-bottom:20px;border-radius:8px;overflow:hidden;page-break-inside:avoid;}.header{background:#f8fafc;padding:15px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;}.name{font-weight:bold;font-size:1.1em;}.role{color:#64748b;font-size:0.9em;}table{width:100%;border-collapse:collapse;font-size:0.9em;}td,th{padding:8px 15px;border-bottom:1px solid #f1f5f9;text-align:left;}th{background:#f1f5f9;color:#64748b;font-weight:600;}.status-ok{color:#059669;font-weight:bold;}.status-parcial{color:#d97706;font-weight:bold;}.status-pending{color:#dc2626;font-weight:bold;}.obs{color:#b45309;font-style:italic;background:#fffbeb;padding:2px 6px;border-radius:4px;}</style></head><body><h1>Reporte de Seguimiento</h1><p>Generado el: ${new Date().toLocaleString()}</p>`;
+                docentes.forEach(d => {
+                    const prog = calcularProgreso(d);
+                    const rolesStr = getTeacherRoles(d).join(", ");
+                    html += `<div class="card"><div class="header"><div><div class="name">${d.nombre}</div><div class="role">${rolesStr} - ${d.detalle}</div></div><div style="text-align:right"><strong>Avance Global: ${prog}%</strong></div></div><table><tr><th>Documento</th><th>Estado</th><th>Observaciones</th></tr>`;
+                    getRequeridos(d, "ALL").forEach(doc => {
+                        const data = d.documentos?.[doc] || {};
+                        let st = "PENDIENTE", cl = "status-pending";
+                        if(data.entregado) {
+                            const p = data.porcentaje ?? 100;
+                            if(p < 100) { st = `PARCIAL (${p}%)`; cl = "status-parcial"; } else { st = "ENTREGADO"; cl = "status-ok"; }
+                        }
+                        html += `<tr><td width="40%">${doc}</td><td width="20%" class="${cl}">${st}</td><td width="40%">${data.obs ? `<span class="obs">${data.obs}</span>` : '-'}</td></tr>`;
+                    });
+                    html += `</table></div>`;
+                });
+                html += `<script>window.onload=()=>window.print()<\/script></body></html>`;
+                w.document.write(html);
+                w.document.close();
+            };
+
+            // UI
+            if (isLoading) return <div className="flex h-screen items-center justify-center text-slate-500 font-bold flex-col bg-slate-50"><Icons.Loader2 className="animate-spin w-12 h-12 mb-4 text-blue-600"/><p>Conectando...</p></div>;
+            if (errorMsg) return <div className="flex h-screen items-center justify-center text-red-500 font-bold p-10 text-center flex-col"><Icons.AlertCircle className="w-16 h-16 mb-4"/><h2 className="text-xl mb-2">Aviso del Sistema</h2><p className="font-normal text-sm mb-4 bg-red-50 p-4 rounded border border-red-100">{errorMsg}</p><button onClick={()=>window.location.reload()} className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">Reintentar</button></div>;
+
+            const docenteSeleccionado = docentes.find(d => String(d.id) === String(selectedDashboardId));
+            const activeRoles = getTeacherRoles(docenteSeleccionado);
+            const progresoTotal = docenteSeleccionado ? calcularProgreso(docenteSeleccionado, selectedRoleView) : 0;
 
             return (
-                <div className="min-h-screen flex flex-col bg-slate-50">
-                    {/* NAVBAR */}
-                    <nav className="bg-slate-900 text-white p-4 shadow-lg sticky top-0 z-50 no-print">
-                        <div className="max-w-7xl mx-auto flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                                <Icons.File className="w-6 h-6 text-blue-400"/>
-                                <span className="font-bold text-lg hidden sm:inline">DOCENTE<span className="text-blue-400">CHECK</span></span>
-                                <span className={`text-[10px] px-2 py-0.5 rounded-full ml-2 ${modoLocal ? 'bg-orange-600' : 'bg-green-600'}`}>
-                                    {modoLocal ? 'MODO LOCAL' : 'EN LÍNEA'}
-                                </span>
-                            </div>
-                            
-                            <div className="hidden md:flex gap-2">
-                                <button onClick={() => setTab('dash')} className={`px-4 py-2 rounded font-bold ${tab === 'dash' ? 'bg-blue-600' : 'hover:bg-slate-800'}`}>Dashboard</button>
-                                <button onClick={() => setTab('list')} className={`px-4 py-2 rounded font-bold ${tab === 'list' ? 'bg-blue-600' : 'hover:bg-slate-800'}`}>Lista</button>
-                            </div>
-
-                            <div className="flex gap-2">
-                                <button onClick={()=>window.location.reload()} className="p-2 bg-slate-700 rounded hover:bg-slate-600" title="Recargar"><Icons.Refresh className="w-5 h-5"/></button>
-                                <button onClick={printPDF} className="p-2 bg-red-600 rounded hover:bg-red-500 font-bold text-xs flex items-center"><Icons.Print className="w-4 h-4 mr-1"/> PDF</button>
-                                <button className="md:hidden p-2" onClick={() => setShowMenu(!showMenu)}><Icons.Menu className="w-6 h-6"/></button>
-                            </div>
-                        </div>
-                        {showMenu && (
-                            <div className="md:hidden mt-4 border-t border-slate-700 pt-2">
-                                <button onClick={() => {setTab('dash'); setShowMenu(false)}} className="block w-full text-left py-2 px-4 hover:bg-slate-800">Dashboard</button>
-                                <button onClick={() => {setTab('list'); setShowMenu(false)}} className="block w-full text-left py-2 px-4 hover:bg-slate-800">Lista</button>
-                            </div>
-                        )}
-                    </nav>
-
-                    {/* CONTENIDO */}
-                    <main className="flex-1 p-4 max-w-7xl mx-auto w-full">
-                        {tab === 'dash' ? (
-                            <div className="fade-in space-y-6">
-                                {/* SELECCION DOCENTE */}
-                                <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 no-print">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Evaluar a:</label>
-                                    <select className="w-full p-3 border rounded-lg bg-white mb-4" value={selectedId} onChange={e => { setSelectedId(e.target.value); setSelectedRoleFilter("ALL"); }}>
-                                        <option value="">-- Selecciona un Docente --</option>
-                                        {docentes.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
-                                    </select>
-                                    
-                                    {docenteSel && (
-                                        <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-100 p-4 rounded-lg">
-                                            <div>
-                                                <h2 className="text-xl font-bold text-slate-800">{docenteSel.nombre}</h2>
-                                                <p className="text-sm text-slate-600">{rolesActivos.join(" + ")} | {docenteSel.detalle}</p>
-                                            </div>
-                                            {rolesActivos.length > 1 && (
-                                                <select className="p-2 text-sm border rounded" value={selectedRoleFilter} onChange={e => setSelectedRoleFilter(e.target.value)}>
-                                                    <option value="ALL">Ver Todos los Roles</option>
-                                                    {rolesActivos.map(r => <option key={r} value={r}>Solo {r}</option>)}
-                                                </select>
-                                            )}
-                                        </div>
-                                    )}
+                <div className="flex flex-col h-screen overflow-hidden">
+                    <header className="bg-slate-900 text-white shadow-lg z-50 flex-shrink-0 h-16">
+                        <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
+                            <div className="flex items-center">
+                                <Icons.FileCheck className="w-8 h-8 mr-2 text-blue-400" />
+                                <span className="font-bold text-xl hidden md:inline">DOCENTE<span className="text-blue-400">CHECK</span></span>
+                                <div className={`ml-4 flex items-center text-xs font-bold px-3 py-1 rounded-full ${isOnline ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
+                                    {isOnline ? <Icons.Wifi className="w-3 h-3 mr-1"/> : <Icons.WifiOff className="w-3 h-3 mr-1"/>}
+                                    {isOnline ? 'CONECTADO' : 'OFFLINE'}
                                 </div>
-
-                                {/* VISTA EVALUACIÓN */}
-                                {docenteSel ? (
-                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                        {/* GRAFICO */}
-                                        <div className="lg:col-span-1 bg-white p-6 rounded-lg shadow-sm border border-slate-200 flex flex-col items-center justify-center">
-                                            <h3 className="font-bold text-slate-500 mb-4">AVANCE GENERAL</h3>
-                                            <div className="w-48 h-48 relative">
-                                                {window.Recharts ? (
-                                                    <ResponsiveContainer width="100%" height="100%">
-                                                        <PieChart>
-                                                            <Pie data={[{value: progreso}, {value: 100-progreso}]} innerRadius={60} outerRadius={80} dataKey="value">
-                                                                <Cell fill={progreso<50?'#ef4444':progreso<100?'#f59e0b':'#10b981'}/>
-                                                                <Cell fill="#f1f5f9"/>
-                                                            </Pie>
-                                                        </PieChart>
-                                                    </ResponsiveContainer>
-                                                ) : <div className="text-gray-400">Cargando gráfico...</div>}
-                                                <div className="absolute inset-0 flex items-center justify-center text-3xl font-black text-slate-700">{progreso}%</div>
-                                            </div>
-                                        </div>
-
-                                        {/* CHECKLIST */}
-                                        <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-                                            <h3 className="font-bold text-slate-800 border-b pb-4 mb-4">Lista de Documentos</h3>
-                                            <div className="space-y-3">
-                                                {getDocsRequeridos(docenteSel, selectedRoleFilter).map(doc => {
-                                                    const data = docenteSel.documentos?.[doc] || {};
-                                                    const isDone = data.entregado;
-                                                    const pct = data.porcentaje ?? (isDone ? 100 : 0);
-                                                    return (
-                                                        <div key={doc} className={`p-4 border rounded-lg transition-all ${isDone ? 'bg-green-50 border-green-200' : 'bg-white'}`}>
-                                                            <div className="flex items-start gap-3">
-                                                                <button onClick={() => toggleDoc(docenteSel.id, doc)} className={`mt-1 w-6 h-6 rounded flex items-center justify-center border ${isDone ? 'bg-green-600 border-green-600 text-white' : 'bg-white border-slate-300'}`}>
-                                                                    {isDone && <Icons.Check className="w-4 h-4"/>}
-                                                                </button>
-                                                                <div className="flex-1">
-                                                                    <div className="font-medium text-slate-800 cursor-pointer" onClick={() => toggleDoc(docenteSel.id, doc)}>{doc}</div>
-                                                                    {isDone && (
-                                                                        <div className="mt-2 flex items-center gap-2 bg-white/50 p-2 rounded no-print">
-                                                                            <span className="text-xs font-bold text-slate-500">CALIFICACIÓN:</span>
-                                                                            <input type="range" className="w-24" value={pct} onChange={(e) => updateMeta(docenteSel.id, doc, 'porcentaje', parseInt(e.target.value))} />
-                                                                            <span className="text-xs font-bold">{pct}%</span>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                                <div className="w-1/3">
-                                                                    <textarea className="w-full text-xs p-2 border rounded resize-none focus:ring-2 focus:ring-blue-500 outline-none" rows="2" placeholder="Observaciones..." value={data.obs || ""} onChange={(e) => updateMeta(docenteSel.id, doc, 'obs', e.target.value)}></textarea>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-20 text-slate-400 no-print">Selecciona un docente para comenzar.</div>
-                                )}
                             </div>
-                        ) : (
-                            /* VISTA: LISTA */
-                            <div className="fade-in space-y-8 no-print">
-                                <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-                                    <h3 className="font-bold text-lg mb-4 text-slate-800">Registrar Nuevo Docente</h3>
-                                    <form onSubmit={handleAdd} className="grid md:grid-cols-12 gap-4 items-end">
-                                        <div className="md:col-span-4">
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Nombre Completo</label>
-                                            <input className="w-full p-2 border rounded" value={newDocente.nombre} onChange={e => setNewDocente({...newDocente, nombre: e.target.value})} required />
+                            <div className="hidden md:flex items-center space-x-2">
+                                <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}><Icons.PieChart className="w-4 h-4 inline mr-2"/> Dashboard</button>
+                                <button onClick={() => setActiveTab('lista')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'lista' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}><Icons.Users className="w-4 h-4 inline mr-2"/> Gestión Lista</button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={handleRefresh} className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-lg transition-all" title="Actualizar Datos"><Icons.RefreshCcw className="w-4 h-4"/></button>
+                                <button onClick={generatePDFReport} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center shadow-lg shadow-red-900/20 transition-transform hover:scale-105"><Icons.Printer className="w-4 h-4 mr-2"/> PDF</button>
+                            </div>
+                            <button className="md:hidden text-slate-300" onClick={() => setSidebarOpen(!sidebarOpen)}>{sidebarOpen ? <Icons.X/> : <Icons.Menu/>}</button>
+                        </div>
+                    </header>
+                    {sidebarOpen && <div className="md:hidden bg-slate-800 text-white p-4 absolute top-16 w-full z-40 shadow-xl border-t border-slate-700"><button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false)}} className="block w-full text-left py-3 px-4 font-bold hover:bg-slate-700 rounded mb-2">Dashboard</button><button onClick={() => {setActiveTab('lista'); setSidebarOpen(false)}} className="block w-full text-left py-3 px-4 font-bold hover:bg-slate-700 rounded">Lista</button></div>}
+                    
+                    <main className="flex-1 overflow-auto bg-slate-50 p-4 md:p-8">
+                        <div className="max-w-7xl mx-auto pb-20">
+                            {activeTab === 'dashboard' ? (
+                                <div className="animate-fade-in space-y-6">
+                                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Seleccionar Docente:</label>
+                                        <div className="relative">
+                                            <select className="w-full p-4 pl-4 pr-10 text-lg font-medium border border-slate-300 rounded-xl outline-none bg-slate-50 focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer hover:bg-white" value={selectedDashboardId} onChange={handleSelectTeacher}>
+                                                <option value="">-- Selecciona un Docente --</option>
+                                                {docentes.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
+                                            </select>
+                                            <Icons.ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-6 h-6 pointer-events-none"/>
                                         </div>
-                                        <div className="md:col-span-4">
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Roles (Selecciona uno o más)</label>
-                                            <div className="flex gap-2 flex-wrap">
-                                                {Object.values(ROLES_KEYS).map(r => (
-                                                    <label key={r} className="flex items-center text-xs bg-slate-100 px-2 py-1 rounded cursor-pointer hover:bg-slate-200">
-                                                        <input type="checkbox" className="mr-1" checked={newDocente.roles.includes(r)} onChange={() => toggleRole(r)} /> {r}
-                                                    </label>
+                                        {docenteSeleccionado && !roleSelectionRequired && (
+                                            <div className="mt-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-slate-100 p-4 rounded-xl border border-slate-200">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="h-12 w-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-md">{docenteSeleccionado.nombre.charAt(0)}</div>
+                                                    <div>
+                                                        <div className="font-bold text-slate-800 text-lg">{docenteSeleccionado.nombre}</div>
+                                                        <div className="text-sm text-slate-500 font-medium flex flex-wrap gap-2">
+                                                            {activeRoles.map(r => <Badge key={r}>{r}</Badge>)}
+                                                            <span className="ml-2 mt-1">{docenteSeleccionado.detalle}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {activeRoles.length > 1 && (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-bold text-slate-500 uppercase"><Icons.Filter className="w-4 h-4 inline mr-1"/> Ver como:</span>
+                                                        <select className="p-2 text-sm border rounded-lg bg-white" value={selectedRoleView} onChange={(e) => setSelectedRoleView(e.target.value)}>
+                                                            <option value="ALL">Todo Combinado</option>
+                                                            {activeRoles.map(r => <option key={r} value={r}>Solo {r}</option>)}
+                                                        </select>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {!docenteSeleccionado ? (
+                                        <div className="text-center py-20 bg-slate-50 border-2 border-dashed border-slate-300 rounded-3xl"><Icons.Users className="w-16 h-16 text-slate-300 mx-auto mb-4"/><h3 className="text-xl font-bold text-slate-600">Selecciona un docente</h3></div>
+                                    ) : roleSelectionRequired ? (
+                                        <div className="fade-in">
+                                            <h3 className="text-center text-xl font-bold text-slate-700 mb-6">¿Qué rol deseas evaluar ahora?</h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+                                                <button onClick={() => selectRoleContext("ALL")} className="bg-white p-8 rounded-xl border-2 border-blue-100 hover:border-blue-500 shadow-sm hover:shadow-lg transition-all text-center group">
+                                                    <div className="bg-blue-100 p-4 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 group-hover:bg-blue-600 group-hover:text-white transition-colors"><Icons.PieChart className="w-8 h-8"/></div>
+                                                    <h4 className="font-bold text-lg text-slate-800">Vista Completa</h4>
+                                                    <p className="text-sm text-slate-500 mt-2">Ver todos los documentos de todos los roles asignados.</p>
+                                                </button>
+                                                {activeRoles.map(role => (
+                                                    <button key={role} onClick={() => selectRoleContext(role)} className="bg-white p-8 rounded-xl border-2 border-slate-100 hover:border-indigo-500 shadow-sm hover:shadow-lg transition-all text-center group">
+                                                        <div className="bg-slate-100 p-4 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 group-hover:bg-indigo-600 group-hover:text-white transition-colors"><Icons.FileCheck className="w-8 h-8"/></div>
+                                                        <h4 className="font-bold text-lg text-slate-800">{role}</h4>
+                                                        <p className="text-sm text-slate-500 mt-2">Gestionar documentos específicos de este cargo.</p>
+                                                    </button>
                                                 ))}
                                             </div>
                                         </div>
-                                        <div className="md:col-span-2">
-                                            <label className="block text-xs font-bold text-slate-500 mb-1">Grado / Área</label>
-                                            <input className="w-full p-2 border rounded" placeholder="Ej. 5to A" value={newDocente.detalle} onChange={e => setNewDocente({...newDocente, detalle: e.target.value})} required />
-                                        </div>
-                                        <div className="md:col-span-2">
-                                            <button className="w-full bg-blue-600 text-white p-2 rounded font-bold hover:bg-blue-700">Agregar</button>
-                                        </div>
-                                    </form>
-                                    
-                                    <div className="mt-4 pt-4 border-t">
-                                        <h4 className="font-bold text-xs text-slate-500 mb-2">Importar desde Excel (Pegar Texto)</h4>
-                                        <div className="flex gap-2">
-                                            <textarea className="flex-1 p-2 border rounded text-xs h-10 focus:h-24 transition-all" placeholder="Formato: Nombre [TAB] Rol [TAB] Detalle" value={importText} onChange={e => setImportText(e.target.value)}></textarea>
-                                            <button onClick={() => {
-                                                if (!importText) return;
-                                                importText.split('\n').forEach(line => {
-                                                    const [n, r, d] = line.split(/\t|,/);
-                                                    if(n) guardarDocente({ nombre: n.trim(), roles: [r?.trim() || ROLES_KEYS.TUTOR], detalle: d?.trim() || "" });
-                                                });
-                                                setImportText("");
-                                                alert("Importados");
-                                            }} className="bg-emerald-600 text-white px-4 rounded font-bold text-xs">Importar</button>
-                                        </div>
-                                    </div>
+                                    ) : (
+                                        <>
+                                            <div className="flex p-1 bg-white border border-slate-200 rounded-xl w-full md:w-fit mx-auto mb-8 shadow-sm">
+                                                <button onClick={() => setTeacherViewMode('graficos')} className={`flex-1 px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center ${teacherViewMode === 'graficos' ? 'bg-blue-600 text-white shadow' : 'text-slate-500'}`}><Icons.PieChart className="w-4 h-4 mr-2"/> Gráficos</button>
+                                                <button onClick={() => setTeacherViewMode('checklist')} className={`flex-1 px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center ${teacherViewMode === 'checklist' ? 'bg-blue-600 text-white shadow' : 'text-slate-500'}`}><Icons.ListChecks className="w-4 h-4 mr-2"/> Checklist</button>
+                                            </div>
+                                            {teacherViewMode === 'graficos' ? (
+                                                <div className="animate-fade-in space-y-6">
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><ChartCard title="Progreso Vista Actual" percent={progresoTotal} color={progresoTotal < 50 ? '#ef4444' : '#10b981'} /></div>
+                                                    <Card className="p-6 border-t-4 border-t-indigo-500"><h3 className="font-bold text-slate-700 mb-6">Estado de Documentos</h3><DocumentStatusGrid items={getRequeridos(docenteSeleccionado, selectedRoleView)} docente={docenteSeleccionado} requiredItems={getRequeridos(docenteSeleccionado, selectedRoleView)} /></Card>
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
+                                                    <div className="lg:col-span-2 space-y-8">
+                                                        <Card className="p-8 border-t-4 border-t-blue-500">
+                                                            <ChecklistGroup title="DOCUMENTOS REQUERIDOS" items={DOCS_POSIBLES} docente={docenteSeleccionado} requiredItems={getRequeridos(docenteSeleccionado, selectedRoleView)} onToggle={toggleDocumento} onUpdateObs={onUpdateObs} onUpdatePercent={onUpdatePercent} />
+                                                        </Card>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
                                 </div>
+                            ) : (
+                                <div className="space-y-8 animate-fade-in">
+                                    <Card className="p-8 bg-white border-slate-200">
+                                        <div className="flex justify-between items-center mb-6"><h3 className="text-lg font-bold flex items-center"><Icons.Plus className="w-5 h-5 mr-2 text-blue-600"/> Registrar Docente</h3><button onClick={() => setShowImport(!showImport)} className="text-sm bg-slate-100 px-4 py-2 rounded-lg font-bold flex items-center"><Icons.FileSpreadsheet className="w-4 h-4 mr-2"/> {showImport ? 'Cerrar' : 'Importar'}</button></div>
+                                        {showImport ? (
+                                            <div className="bg-slate-50 p-6 rounded-xl border border-dashed border-slate-300"><textarea className="w-full h-32 p-3 text-sm border rounded-lg" placeholder={"Juan Perez\tDocente Tutor\t5to A"} value={importText} onChange={e => setImportText(e.target.value)}></textarea><div className="mt-4 flex justify-end"><button onClick={handleImportarDocentes} className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-bold">Procesar</button></div></div>
+                                        ) : (
+                                            <form onSubmit={handleAddDocente} className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
+                                                <div className="md:col-span-12"><label className="block text-xs font-bold text-slate-500 mb-1">Nombre Completo</label><input required type="text" className="w-full p-3 text-sm border rounded-lg" value={newDocente.nombre} onChange={e => setNewDocente({...newDocente, nombre: e.target.value})} /></div>
+                                                
+                                                <div className="md:col-span-12">
+                                                    <label className="block text-xs font-bold text-slate-500 mb-2">Seleccione los Roles y especifique el detalle:</label>
+                                                    <div className="grid grid-cols-1 gap-4">
+                                                        {Object.values(ROLES_KEYS).map(role => (
+                                                            <div key={role} className={`p-4 rounded-lg border ${selectedRoles.includes(role) ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-200'}`}>
+                                                                <div className="flex items-center mb-3">
+                                                                    <input type="checkbox" className="w-5 h-5 mr-3" checked={selectedRoles.includes(role)} onChange={() => toggleNewRole(role)} />
+                                                                    <span className="font-bold text-sm text-slate-700">{role}</span>
+                                                                </div>
+                                                                
+                                                                {/* INPUTS ESPECÍFICOS POR ROL SI ESTÁ SELECCIONADO */}
+                                                                {selectedRoles.includes(role) && (
+                                                                    <div className="ml-8 animate-fade-in">
+                                                                        {role === ROLES_KEYS.TUTOR && (
+                                                                            <select className="w-full p-2 text-sm border rounded bg-white" value={detailInputs.tutorGrade} onChange={e => setDetailInputs({...detailInputs, tutorGrade: e.target.value})}>
+                                                                                <option value="">-- Seleccionar Grado --</option>
+                                                                                {GRADOS_TUTORIA.map(g => <option key={g} value={g}>{g}</option>)}
+                                                                            </select>
+                                                                        )}
+                                                                        {role === ROLES_KEYS.AREA && (
+                                                                            <select className="w-full p-2 text-sm border rounded bg-white" value={detailInputs.areaName} onChange={e => setDetailInputs({...detailInputs, areaName: e.target.value})}>
+                                                                                <option value="">-- Seleccionar Área --</option>
+                                                                                {AREAS_CURRICULARES.map(a => <option key={a} value={a}>{a}</option>)}
+                                                                            </select>
+                                                                        )}
+                                                                        {role === ROLES_KEYS.REGENCIA && (
+                                                                            <input type="text" className="w-full p-2 text-sm border rounded" placeholder="Descripción de Regencia" value={detailInputs.regenciaDesc} onChange={e => setDetailInputs({...detailInputs, regenciaDesc: e.target.value})} />
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
 
-                                <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-                                    <table className="w-full text-sm text-left">
-                                        <thead className="bg-slate-50 text-slate-600 border-b">
-                                            <tr>
-                                                <th className="px-6 py-3">Docente</th>
-                                                <th className="px-6 py-3">Roles</th>
-                                                <th className="px-6 py-3">Detalle</th>
-                                                <th className="px-6 py-3 text-right">Acción</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y">
-                                            {docentes.map(d => (
-                                                <tr key={d.id} className="hover:bg-slate-50">
-                                                    <td className="px-6 py-3 font-bold">{d.nombre}</td>
-                                                    <td className="px-6 py-3 text-xs">{(d.roles || [d.rol]).join(", ")}</td>
-                                                    <td className="px-6 py-3 text-slate-500">{d.detalle}</td>
-                                                    <td className="px-6 py-3 text-right">
-                                                        <button onClick={() => eliminarDocente(d.id)} className="text-red-500 hover:text-red-700"><Icons.Trash className="w-4 h-4"/></button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                            {docentes.length === 0 && <tr><td colSpan="4" className="p-4 text-center text-slate-400">Sin registros</td></tr>}
-                                        </tbody>
-                                    </table>
+                                                <div className="md:col-span-12 flex justify-end mt-4"><button type="submit" className="w-full md:w-auto bg-blue-600 text-white px-8 py-3 rounded-lg font-bold">+ Registrar Docente</button></div>
+                                            </form>
+                                        )}
+                                    </Card>
+                                    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm"><table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500"><tr><th className="px-8 py-4">Docente</th><th className="px-8 py-4">Roles</th><th className="px-8 py-4">Detalle</th><th className="px-8 py-4 text-right">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{docentes.map(d => (<tr key={d.id} className="hover:bg-blue-50/30"><td className="px-8 py-4 font-bold">{d.nombre}</td><td className="px-8 py-4 flex flex-col gap-1">{getTeacherRoles(d).map(r => <span key={r} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded w-fit">{r}</span>)}</td><td className="px-8 py-4 text-slate-600">{d.detalle}</td><td className="px-8 py-4 text-right"><button onClick={() => handleDeleteDocente(d.id)} className="text-slate-400 hover:text-red-600"><Icons.Trash2 className="w-4 h-4"/></button></td></tr>))}</tbody></table></div>
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </main>
                 </div>
             );
