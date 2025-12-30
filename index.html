@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Seguimiento Docente</title>
     
-    <!-- 1. Estilos y Librerías React -->
+    <!-- 1. Carga de Librerías Estables (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -17,59 +17,46 @@
         body { background-color: #f8fafc; font-family: 'Segoe UI', sans-serif; }
         .animate-fade-in { animation: fadeIn 0.5s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        @media print { .no-print { display: none !important; } .print-only { display: block !important; } .card { break-inside: avoid; } }
+        
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background: white; }
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <!-- 2. Inicialización de Firebase (Módulo Seguro) -->
+    <!-- 2. Módulo de Firebase -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        // TUS CREDENCIALES
-        const firebaseConfig = {
-            apiKey: "AIzaSyBZBFUrU6rAAcpDXKetsH3eT2XyZQ2e3Rg",
-            authDomain: "control-docentes.firebaseapp.com",
-            projectId: "control-docentes",
-            storageBucket: "control-docentes.firebasestorage.app",
-            messagingSenderId: "759330033292",
-            appId: "1:759330033292:web:ed0bcf6487779b184e75a9"
+        // Exponer módulos al entorno global para React
+        window.FirebaseMods = {
+            initializeApp, getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot,
+            getAuth, signInAnonymously, onAuthStateChanged
         };
-
-        try {
-            const app = initializeApp(firebaseConfig);
-            const db = getFirestore(app);
-            const auth = getAuth(app);
-
-            // Exponer servicios al objeto window de forma segura
-            window.AppServices = {
-                db, auth, 
-                ops: { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, signInAnonymously, onAuthStateChanged, signInWithCustomToken }
-            };
-            
-            console.log("Firebase inicializado correctamente.");
-            window.dispatchEvent(new Event('firebase-ready'));
-        } catch (error) {
-            console.error("Error crítico inicializando Firebase:", error);
-            window.firebaseError = error.message;
-        }
+        // Señal para iniciar la app
+        window.dispatchEvent(new Event('firebase-ready'));
     </script>
 
     <!-- 3. Aplicación React -->
     <script type="text/babel">
-        // --- ICONOS ---
+        // --- ICONOS (Lucide SVG) ---
         const Icon = ({ d, className, ...props }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
                 {Array.isArray(d) ? d.map((path, i) => <path key={i} d={path} />) : <path d={d} />}
             </svg>
         );
+
         const Icons = {
             FileCheck: (p) => <Icon d={["M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z", "M14 2v6h6", "m9 15 2 2 4-4"]} {...p} />,
             PieChart: (p) => <Icon d={["M21.21 15.89A10 10 0 1 1 8 2.83", "M22 12A10 10 0 0 0 12 2v10z"]} {...p} />,
@@ -91,14 +78,16 @@
             Cloud: (p) => <Icon d={["M17.5 19c0-3.037-2.463-5.5-5.5-5.5S6.5 15.963 6.5 19", "M17.5 19H19a5 5 0 0 0 0-10 7.5 7.5 0 0 0-13 3 5 5 0 0 0 2 9h1.5"]} {...p} />,
             Loader2: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>,
             RefreshCcw: (p) => <Icon d={["M21 2v6h-6", "M3 12a9 9 0 0 1 15-6.7L21 8", "M3 22v-6h6", "M21 12a9 9 0 0 1-15 6.7L3 16"]} {...p} />,
-            Filter: (p) => <Icon d={["M22 3H2l8 9.46V19l4 2v-8.54L22 3z"]} {...p} />
+            Filter: (p) => <Icon d={["M22 3H2l8 9.46V19l4 2v-8.54L22 3z"]} {...p} />,
+            Wifi: (p) => <Icon d={["M5 12.55a11 11 0 0 1 14.08 0", "M1.42 9a16 16 0 0 1 21.16 0", "M8.53 16.11a6 6 0 0 1 6.95 0", "M12 20h.01"]} {...p} />,
+            WifiOff: (p) => <Icon d={["M1 1l22 22", "M16.72 11.06A10.94 10.94 0 0 1 19 12.55", "M5 12.55a10.94 10.94 0 0 1 5.17-2.39", "M10.71 5.05A16 16 0 0 1 22.58 9", "M1.42 9a15.91 15.91 0 0 1 4.7-2.88", "M8.53 16.11a6 6 0 0 1 6.95 0", "M12 20h.01"]} {...p} />
         };
 
         const { useState, useEffect, useMemo } = React;
         const RechartsObj = window.Recharts || {};
         const { PieChart, Pie, Cell, ResponsiveContainer } = RechartsObj;
 
-        // --- CONFIGURACIÓN ---
+        // --- DATOS Y CONSTANTES ---
         const ROLES_KEYS = { TUTOR: "Docente Tutor", AREA: "Docente Área a Cargo", REGENCIA: "Regencia" };
         
         const GRADOS_TUTORIA = ["Inicial 3 años", "Inicial 4 años", "Inicial 5 años", "Primero Primaria", "Segundo Primaria", "Tercero Primaria", "Cuarto Primaria", "Quinto Primaria", "Sexto Primaria", "Primero Secundaria", "Segundo Secundaria", "Tercero Secundaria", "Cuarto Secundaria", "Quinto Secundaria"];
@@ -112,6 +101,7 @@
             "Informe de Estudiantes con R.R.", "Informe de Estudiantes con P.G.", "Informe de Tutoría"
         ];
 
+        // Definición de Reglas de Negocio
         const REGLAS_ASIGNACION = {
             [ROLES_KEYS.TUTOR]: { docs: DOCS_POSIBLES },
             [ROLES_KEYS.AREA]: { docs: ["Llenado de: (competencias, capacidades, desempeños y criterios)", "Llenado de conclusiones descriptivas", "Formato Oficial de Notas (SIAGIE)", "Conclusiones Descriptivas (SIAGIE)"] },
@@ -121,7 +111,7 @@
         const Card = ({ children, className = "" }) => <div className={`bg-white rounded-xl shadow-sm border border-slate-200 ${className}`}>{children}</div>;
         const Badge = ({ children, type = "neutral" }) => <span className={`px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 mr-1`}>{children}</span>;
 
-        // Componente: Checklist
+        // Componente: Grupo de Checklist
         const ChecklistGroup = ({ title, items, docente, requiredItems, onToggle, onUpdateObs, onUpdatePercent }) => {
             const relevantItems = items.filter(item => requiredItems.includes(item));
             if (!relevantItems.length) return null;
@@ -136,6 +126,7 @@
                             const isChecked = docData.entregado;
                             const hasObs = docData.obs && docData.obs.length > 0;
                             const currentPercent = docData.porcentaje !== undefined ? docData.porcentaje : (isChecked ? 100 : 0);
+                            
                             return (
                                 <div key={idx} className={`rounded-lg border-2 transition-all duration-200 ${isChecked ? 'bg-emerald-50/30 border-emerald-400' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
                                     <div className="flex flex-col md:flex-row md:items-start p-4 gap-4">
@@ -226,10 +217,12 @@
         };
 
         const App = () => {
+            // Estados
             const [user, setUser] = useState(null);
             const [docentes, setDocentes] = useState([]);
             const [isLoading, setIsLoading] = useState(true);
             const [errorMsg, setErrorMsg] = useState("");
+            const [isOnline, setIsOnline] = useState(navigator.onLine);
             
             const [activeTab, setActiveTab] = useState('dashboard');
             const [selectedDashboardId, setSelectedDashboardId] = useState("");
@@ -244,21 +237,25 @@
             const [services, setServices] = useState(null);
 
             useEffect(() => {
+                const handleOnline = () => setIsOnline(true);
+                const handleOffline = () => setIsOnline(false);
+                window.addEventListener('online', handleOnline);
+                window.addEventListener('offline', handleOffline);
+                
                 const checkFirebase = () => {
                     if (window.AppServices) {
                         setServices(window.AppServices);
                         
-                        // Auth anónimo
                         const { auth, ops } = window.AppServices;
                         ops.signInAnonymously(auth).catch(err => {
                             console.error("Auth Error:", err);
-                            setErrorMsg("Error de autenticación. Verifica la consola.");
-                            setIsLoading(false);
+                            // No bloqueamos, solo avisamos
                         });
 
                         ops.onAuthStateChanged(auth, (u) => {
                             setUser(u);
-                            if (u) setIsLoading(false);
+                            // Quitamos loading incluso si no hay user, la app reintentará
+                            setIsLoading(false);
                         });
                     } else if (window.firebaseError) {
                         setErrorMsg("Error iniciando Firebase: " + window.firebaseError);
@@ -268,10 +265,16 @@
                     }
                 };
                 checkFirebase();
+
+                return () => {
+                    window.removeEventListener('online', handleOnline);
+                    window.removeEventListener('offline', handleOffline);
+                };
             }, []);
 
+            // Listener de Datos
             useEffect(() => {
-                if (!user || !services) return;
+                if (!services) return;
                 const { db, ops } = services;
                 
                 const unsubscribe = ops.onSnapshot(ops.collection(db, 'docentes'), 
@@ -284,12 +287,16 @@
                     }, 
                     (err) => {
                         console.error("Snapshot Error:", err);
-                        if (err.code === 'permission-denied') setErrorMsg("Permiso denegado. Revisa reglas Firestore.");
+                        // Solo mostramos error si realmente falla la carga inicial
+                        if (docentes.length === 0) {
+                            if (err.code === 'permission-denied') setErrorMsg("Permiso denegado. Revisa reglas Firestore.");
+                            else setErrorMsg("Error de datos: " + err.message);
+                        }
                         setIsLoading(false);
                     }
                 );
                 return () => unsubscribe();
-            }, [user, services]);
+            }, [services]);
 
             // --- LÓGICA ---
             const getTeacherRoles = (d) => {
@@ -326,6 +333,10 @@
             };
 
             // --- HANDLERS ---
+            const handleRefresh = () => {
+                window.location.reload();
+            };
+
             const handleAddDocente = async (e) => {
                 e.preventDefault();
                 if (!services) return alert("Sin conexión");
@@ -440,8 +451,7 @@
 
             // --- RENDER ---
             if (isLoading) return <div className="flex h-screen items-center justify-center text-slate-500 font-bold flex-col bg-slate-50"><Icons.Loader2 className="animate-spin w-12 h-12 mb-4 text-blue-600"/><p>Conectando...</p></div>;
-            if (errorMsg) return <div className="flex h-screen items-center justify-center text-red-500 font-bold p-10 text-center flex-col"><Icons.AlertCircle className="w-16 h-16 mb-4"/><h2 className="text-xl mb-2">Aviso del Sistema</h2><p className="font-normal text-sm mb-4 bg-red-50 p-4 rounded border border-red-100">{errorMsg}</p><button onClick={()=>window.location.reload()} className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">Reintentar</button></div>;
-
+            
             const docenteSeleccionado = docentes.find(d => String(d.id) === String(selectedDashboardId));
             const activeRoles = getTeacherRoles(docenteSeleccionado);
             const progresoTotal = docenteSeleccionado ? calcularProgreso(docenteSeleccionado, selectedRoleView) : 0;
@@ -450,12 +460,23 @@
                 <div className="flex flex-col h-screen overflow-hidden">
                     <header className="bg-slate-900 text-white shadow-lg z-50 flex-shrink-0 h-16">
                         <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
-                            <div className="flex items-center"><Icons.FileCheck className="w-8 h-8 mr-2 text-blue-400" /><span className="font-bold text-xl hidden md:inline">DOCENTE<span className="text-blue-400">CHECK</span></span></div>
+                            <div className="flex items-center">
+                                <Icons.FileCheck className="w-8 h-8 mr-2 text-blue-400" />
+                                <span className="font-bold text-xl hidden md:inline">DOCENTE<span className="text-blue-400">CHECK</span></span>
+                                {/* INDICADOR DE ESTADO */}
+                                <div className={`ml-4 flex items-center text-xs font-bold px-3 py-1 rounded-full ${isOnline ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
+                                    {isOnline ? <Icons.Wifi className="w-3 h-3 mr-1"/> : <Icons.WifiOff className="w-3 h-3 mr-1"/>}
+                                    {isOnline ? 'CONECTADO' : 'OFFLINE'}
+                                </div>
+                            </div>
                             <div className="hidden md:flex items-center space-x-2">
                                 <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}><Icons.PieChart className="w-4 h-4 inline mr-2"/> Dashboard</button>
                                 <button onClick={() => setActiveTab('lista')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'lista' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}><Icons.Users className="w-4 h-4 inline mr-2"/> Gestión Lista</button>
                             </div>
-                            <div><button onClick={generatePDFReport} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center shadow-lg shadow-red-900/20 transition-transform hover:scale-105"><Icons.Printer className="w-4 h-4 mr-2"/> PDF</button></div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={handleRefresh} className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-lg transition-all" title="Actualizar Datos"><Icons.RefreshCcw className="w-4 h-4"/></button>
+                                <button onClick={generatePDFReport} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center shadow-lg shadow-red-900/20 transition-transform hover:scale-105"><Icons.Printer className="w-4 h-4 mr-2"/> PDF</button>
+                            </div>
                             <button className="md:hidden text-slate-300" onClick={() => setSidebarOpen(!sidebarOpen)}>{sidebarOpen ? <Icons.X/> : <Icons.Menu/>}</button>
                         </div>
                     </header>
@@ -463,6 +484,8 @@
                     
                     <main className="flex-1 overflow-auto bg-slate-50 p-4 md:p-8">
                         <div className="max-w-7xl mx-auto pb-20">
+                            {errorMsg && <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert"><strong className="font-bold">Error: </strong><span className="block sm:inline">{errorMsg}</span></div>}
+                            
                             {activeTab === 'dashboard' ? (
                                 <div className="animate-fade-in space-y-6">
                                     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
