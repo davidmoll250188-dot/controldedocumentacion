@@ -1,61 +1,56 @@
-
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Seguimiento Docente</title>
     
-    <!-- 1. Carga de Librerías Estables (React, Tailwind, Recharts, Babel) -->
+    <!-- 1. Carga de Librerías Estables (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- React & ReactDOM (Versión Producción) -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    
-    <!-- Dependencias de Recharts -->
     <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
-    
-    <!-- Recharts (Versión específica compatible con UMD) -->
     <script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.min.js"></script>
-    
-    <!-- Babel para JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-    <!-- Estilos adicionales -->
     <style>
         body { background-color: #f8fafc; font-family: 'Segoe UI', sans-serif; }
         .animate-fade-in { animation: fadeIn 0.5s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        /* Scrollbar personalizada */
+        /* Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background: white; }
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <!-- 2. Configuración e Inicialización de Firebase (Módulo) -->
+    <!-- 2. Módulo de Firebase -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        // Importamos signInWithCustomToken para arreglar el permiso
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        // Exponer Firebase al objeto window para que React lo pueda usar globalmente
+        // Exponer módulos al entorno global para React
         window.FirebaseMods = {
             initializeApp, getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot,
-            getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken
+            getAuth, signInAnonymously, onAuthStateChanged
         };
-
-        // Disparar evento para avisar que los módulos de Firebase están listos
+        // Señal para iniciar la app
         window.dispatchEvent(new Event('firebase-ready'));
     </script>
 
-    <!-- 3. Aplicación React Principal -->
+    <!-- 3. Aplicación React -->
     <script type="text/babel">
-        // --- ICONOS SVG (Lucide simplificado) ---
+        // --- ICONOS (Lucide SVG) ---
         const Icon = ({ d, className, ...props }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
                 {Array.isArray(d) ? d.map((path, i) => <path key={i} d={path} />) : <path d={d} />}
@@ -63,51 +58,58 @@
         );
 
         const Icons = {
-            FileCheck: (props) => <Icon d={["M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z", "M14 2v6h6", "m9 15 2 2 4-4"]} {...props} />,
-            PieChart: (props) => <Icon d={["M21.21 15.89A10 10 0 1 1 8 2.83", "M22 12A10 10 0 0 0 12 2v10z"]} {...props} />,
-            Users: (props) => <Icon d={["M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", "M16 3.13a4 4 0 0 1 0 7.75", "M22 21v-2a4 4 0 0 0-3-3.87"]} {...props}><circle cx="9" cy="7" r="4"/></Icon>,
-            Printer: (props) => <Icon d={["M6 9V2h12v7", "M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2", "M6 14h12v8H6z"]} {...props} />,
-            Menu: (props) => <Icon d={["M4 12h16", "M4 6h16", "M4 18h16"]} {...props} />,
-            X: (props) => <Icon d={["M18 6 6 18", "M6 6 18 18"]} {...props} />,
-            Plus: (props) => <Icon d={["M5 12h14", "M12 5v14"]} {...props} />,
-            FileSpreadsheet: (props) => <Icon d={["M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z", "M14 2v6h6", "M8 13h2", "M8 17h2", "M14 13h2", "M14 17h2"]} {...props} />,
-            Upload: (props) => <Icon d={["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", "M17 8l-5-5-5 5", "M12 3v12"]} {...props} />,
-            Trash2: (props) => <Icon d={["M3 6h18", "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6", "M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"]} {...props} />,
-            CheckSquare: (props) => <Icon d={["M9 11l3 3L22 4", "M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"]} {...props} />,
-            AlertCircle: (props) => <Icon d={["M12 8v4", "M12 16h.01"]} {...props}><circle cx="12" cy="12" r="10"/></Icon>,
-            ChevronDown: (props) => <Icon d={["M6 9l6 6 6-6"]} {...props} />,
-            FileText: (props) => <Icon d={["M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z", "M14 2v6h6", "M16 13H8", "M16 17H8", "M10 9H8"]} {...props} />,
-            ListChecks: (props) => <Icon d={["M10 6h11", "M10 12h11", "M10 18h11", "M4 6h1", "M4 12h1", "M4 18h1"]} {...props} />,
-            CheckCircle2: (props) => <Icon d={["M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z", "m9 12 2 2 4-4"]} {...props} />,
-            XCircle: (props) => <Icon d={["M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z", "m15 9-6 6", "m9 9 6 6"]} {...props} />,
-            Cloud: (props) => <Icon d={["M17.5 19c0-3.037-2.463-5.5-5.5-5.5S6.5 15.963 6.5 19", "M17.5 19H19a5 5 0 0 0 0-10 7.5 7.5 0 0 0-13 3 5 5 0 0 0 2 9h1.5"]} {...props} />,
-            Loader2: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+            FileCheck: (p) => <Icon d={["M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z", "M14 2v6h6", "m9 15 2 2 4-4"]} {...p} />,
+            PieChart: (p) => <Icon d={["M21.21 15.89A10 10 0 1 1 8 2.83", "M22 12A10 10 0 0 0 12 2v10z"]} {...p} />,
+            Users: (p) => <Icon d={["M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", "M16 3.13a4 4 0 0 1 0 7.75", "M22 21v-2a4 4 0 0 0-3-3.87"]} {...p}><circle cx="9" cy="7" r="4"/></Icon>,
+            Printer: (p) => <Icon d={["M6 9V2h12v7", "M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2", "M6 14h12v8H6z"]} {...p} />,
+            Menu: (p) => <Icon d={["M4 12h16", "M4 6h16", "M4 18h16"]} {...p} />,
+            X: (p) => <Icon d={["M18 6 6 18", "M6 6 18 18"]} {...p} />,
+            Plus: (p) => <Icon d={["M5 12h14", "M12 5v14"]} {...p} />,
+            FileSpreadsheet: (p) => <Icon d={["M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z", "M14 2v6h6", "M8 13h2", "M8 17h2", "M14 13h2", "M14 17h2"]} {...p} />,
+            Upload: (p) => <Icon d={["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", "M17 8l-5-5-5 5", "M12 3v12"]} {...p} />,
+            Trash2: (p) => <Icon d={["M3 6h18", "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6", "M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"]} {...p} />,
+            CheckSquare: (p) => <Icon d={["M9 11l3 3L22 4", "M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"]} {...p} />,
+            AlertCircle: (p) => <Icon d={["M12 8v4", "M12 16h.01"]} {...p}><circle cx="12" cy="12" r="10"/></Icon>,
+            ChevronDown: (p) => <Icon d={["M6 9l6 6 6-6"]} {...p} />,
+            FileText: (p) => <Icon d={["M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z", "M14 2v6h6", "M16 13H8", "M16 17H8", "M10 9H8"]} {...p} />,
+            ListChecks: (p) => <Icon d={["M10 6h11", "M10 12h11", "M10 18h11", "M4 6h1", "M4 12h1", "M4 18h1"]} {...p} />,
+            CheckCircle2: (p) => <Icon d={["M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z", "m9 12 2 2 4-4"]} {...p} />,
+            XCircle: (p) => <Icon d={["M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z", "m15 9-6 6", "m9 9 6 6"]} {...p} />,
+            Cloud: (p) => <Icon d={["M17.5 19c0-3.037-2.463-5.5-5.5-5.5S6.5 15.963 6.5 19", "M17.5 19H19a5 5 0 0 0 0-10 7.5 7.5 0 0 0-13 3 5 5 0 0 0 2 9h1.5"]} {...p} />,
+            Loader2: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>,
+            RefreshCcw: (p) => <Icon d={["M21 2v6h-6", "M3 12a9 9 0 0 1 15-6.7L21 8", "M3 22v-6h6", "M21 12a9 9 0 0 1-15 6.7L3 16"]} {...p} />
         };
 
         const { useState, useEffect } = React;
-        // Acceder a Recharts de manera segura
         const RechartsObj = window.Recharts || {};
-        const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } = RechartsObj;
+        const { PieChart, Pie, Cell, ResponsiveContainer } = RechartsObj;
 
-        // --- CONSTANTES ---
+        // --- DATOS Y CONSTANTES ---
         const ROLES = { TUTOR: "Docente Tutor", AREA: "Docente Área a Cargo", REGENCIA: "Regencia" };
         const GRADOS_TUTORIA = ["Inicial 3 años", "Inicial 4 años", "Inicial 5 años", "Primero Primaria", "Segundo Primaria", "Tercero Primaria", "Cuarto Primaria", "Quinto Primaria", "Sexto Primaria", "Primero Secundaria", "Segundo Secundaria", "Tercero Secundaria", "Cuarto Secundaria", "Quinto Secundaria"];
         const AREAS_CURRICULARES = ["EPT", "Matemática", "Comunicación", "Ciencia y Tecnología", "Religión", "DPCYC", "Ciencias Sociales", "Personal Social", "Ed. Física", "Arte", "Inglés"];
-        const GRUPO_REGISTRO_NOTAS = { id: "registro_notas", titulo: "REGISTRO DE NOTAS (Carpeta Pedagógica)", items: ["Carátula", "Registro de estudiantes", "Asistencia", "Llenado de: (competencias, capacidades, desempeños y criterios)", "Llenado de conclusiones descriptivas", "Llenado de comportamiento", "Llenado de apreciación del tutor"] };
-        const GRUPO_DOCUMENTOS_ADICIONALES = { id: "adicionales", titulo: "DOCUMENTACIÓN ADMINISTRATIVA Y SIAGIE", items: ["Formato Oficial de Notas (SIAGIE)", "Conclusiones Descriptivas (SIAGIE)", "Comentario General", "Determinación de Primeros Puestos", "Registro de HSE y FR", "Informe de HSE y FR", "Informe de Nivel de Logro de Competencia", "Inventario", "Informe de Estudiantes con R.R.", "Informe de Estudiantes con P.G.", "Informe de Tutoría"] };
+        const DOCS_POSIBLES = [
+            "Carátula", "Registro de estudiantes", "Asistencia", "Llenado de: (competencias, capacidades, desempeños y criterios)", 
+            "Llenado de conclusiones descriptivas", "Llenado de comportamiento", "Llenado de apreciación del tutor",
+            "Formato Oficial de Notas (SIAGIE)", "Conclusiones Descriptivas (SIAGIE)", "Comentario General", "Determinación de Primeros Puestos", 
+            "Registro de HSE y FR", "Informe de HSE y FR", "Informe de Nivel de Logro de Competencia", "Inventario", 
+            "Informe de Estudiantes con R.R.", "Informe de Estudiantes con P.G.", "Informe de Tutoría"
+        ];
+        
+        // REGLAS DE ASIGNACIÓN
         const REGLAS_ASIGNACION = {
-            [ROLES.TUTOR]: { registro_notas: GRUPO_REGISTRO_NOTAS.items, adicionales: GRUPO_DOCUMENTOS_ADICIONALES.items },
-            [ROLES.AREA]: { registro_notas: ["Llenado de: (competencias, capacidades, desempeños y criterios)", "Llenado de conclusiones descriptivas"], adicionales: ["Formato Oficial de Notas (SIAGIE)", "Conclusiones Descriptivas (SIAGIE)"] },
-            [ROLES.REGENCIA]: { registro_notas: ["Llenado de comportamiento"], adicionales: ["Inventario"] }
+            [ROLES.TUTOR]: { docs: DOCS_POSIBLES },
+            [ROLES.AREA]: { docs: ["Llenado de: (competencias, capacidades, desempeños y criterios)", "Llenado de conclusiones descriptivas", "Formato Oficial de Notas (SIAGIE)", "Conclusiones Descriptivas (SIAGIE)"] },
+            [ROLES.REGENCIA]: { docs: ["Llenado de comportamiento", "Inventario"] }
         };
 
-        // --- COMPONENTES UI ---
         const Card = ({ children, className = "" }) => <div className={`bg-white rounded-xl shadow-sm border border-slate-200 ${className}`}>{children}</div>;
         const Badge = ({ children, type = "neutral" }) => <span className={`px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700`}>{children}</span>;
 
+        // Componente: Grupo de Checklist con Sliders
         const ChecklistGroup = ({ title, items, docente, requiredItems, onToggle, onUpdateObs, onUpdatePercent }) => {
             const relevantItems = items.filter(item => requiredItems.includes(item));
-            if (relevantItems.length === 0) return null;
+            if (!relevantItems.length) return null;
             return (
                 <div className="mb-8">
                     <h4 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center border-b pb-2">
@@ -119,6 +121,7 @@
                             const isChecked = docData.entregado;
                             const hasObs = docData.obs && docData.obs.length > 0;
                             const currentPercent = docData.porcentaje !== undefined ? docData.porcentaje : (isChecked ? 100 : 0);
+                            
                             return (
                                 <div key={idx} className={`rounded-lg border-2 transition-all duration-200 ${isChecked ? 'bg-emerald-50/30 border-emerald-400' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
                                     <div className="flex flex-col md:flex-row md:items-start p-4 gap-4">
@@ -127,11 +130,9 @@
                                                 {isChecked && <Icons.CheckSquare className="w-5 h-5" />}
                                             </div>
                                             <div className="flex-1">
-                                                <div className="cursor-pointer" onClick={() => onToggle(docente.id, docName)}>
-                                                    <span className={`text-base ${isChecked ? 'text-emerald-900 font-bold' : 'text-slate-700 font-medium'}`}>{docName}</span>
-                                                </div>
+                                                <div className="cursor-pointer font-medium text-slate-800" onClick={() => onToggle(docente.id, docName)}>{docName}</div>
                                                 {(isChecked && hasObs) && (
-                                                    <div className="mt-2 flex items-center animate-fade-in">
+                                                    <div className="mt-2 flex items-center animate-fade-in bg-white/50 p-2 rounded-lg">
                                                         <span className="text-xs font-bold text-slate-500 mr-2 uppercase">Calificación:</span>
                                                         <input type="range" min="0" max="100" value={currentPercent} onChange={(e) => onUpdatePercent(docente.id, docName, parseInt(e.target.value))} className="w-32 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 mr-2" />
                                                         <span className={`text-xs font-bold px-2 py-0.5 rounded ${currentPercent < 100 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{currentPercent}%</span>
@@ -139,12 +140,10 @@
                                                 )}
                                             </div>
                                         </div>
-                                        <div className="w-full md:w-1/2 pl-12 md:pl-0">
-                                            <div className="relative">
-                                                <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1 uppercase tracking-wider">Observaciones {isChecked && "(Habilita %)"}</label>
-                                                <textarea rows="2" placeholder="Agregar observación..." className={`text-sm px-3 py-2 rounded-md border outline-none transition-all w-full focus:border-blue-500 shadow-sm resize-y ${hasObs ? 'bg-amber-50 border-amber-300 text-amber-900 font-medium' : 'bg-slate-50 border-slate-200 text-slate-600'}`} value={docData.obs || ""} onChange={(e) => onUpdateObs(docente.id, docName, e.target.value)} />
-                                                {hasObs && <div className="absolute top-0 right-0"><Icons.AlertCircle className="w-4 h-4 text-amber-500" /></div>}
-                                            </div>
+                                        <div className="w-full md:w-1/2 pl-12 md:pl-0 relative">
+                                            <label className="block text-[10px] font-bold text-slate-400 mb-1 ml-1 uppercase tracking-wider">Observaciones {isChecked && "(Habilita %)"}</label>
+                                            <textarea rows="2" placeholder="Agregar observación..." className={`text-sm px-3 py-2 rounded-md border outline-none transition-all w-full focus:border-blue-500 shadow-sm resize-y ${hasObs ? 'bg-amber-50 border-amber-300 text-amber-900 font-medium' : 'bg-slate-50 border-slate-200 text-slate-600'}`} value={docData.obs || ""} onChange={(e) => onUpdateObs(docente.id, docName, e.target.value)} />
+                                            {hasObs && <div className="absolute top-0 right-0"><Icons.AlertCircle className="w-4 h-4 text-amber-500" /></div>}
                                         </div>
                                     </div>
                                 </div>
@@ -157,32 +156,15 @@
 
         const ChartCard = ({ title, percent, color }) => {
             const data = [{ name: 'Completado', value: percent }, { name: 'Pendiente', value: 100 - percent }];
-            
-            // Fallback si Recharts no cargó
-            if (!PieChart || !ResponsiveContainer) {
-                return (
-                    <Card className="p-6 flex flex-col items-center justify-center relative overflow-hidden h-48">
-                        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-4 text-center z-10">{title}</h3>
-                        <div className="text-4xl font-black text-slate-700">{percent}%</div>
-                        <div className="text-xs text-slate-400 mt-2">(Gráfico no disponible)</div>
-                    </Card>
-                );
-            }
-
+            if (!PieChart || !ResponsiveContainer) return <Card className="p-6 flex flex-col items-center justify-center h-48"><h3 className="text-sm font-bold text-slate-500 mb-4">{title}</h3><div className="text-4xl font-black text-slate-700">{percent}%</div></Card>;
             return (
-                <Card className="p-6 flex flex-col items-center justify-center relative overflow-hidden">
-                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-4 text-center z-10">{title}</h3>
+                <Card className="p-6 flex flex-col items-center justify-center overflow-hidden">
+                    <h3 className="text-sm font-bold text-slate-500 mb-4 z-10">{title}</h3>
                     <div className="h-40 w-full relative z-10">
                         <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie data={data} innerRadius={45} outerRadius={60} paddingAngle={5} dataKey="value" startAngle={90} endAngle={-270} stroke="none">
-                                    <Cell fill={color} /><Cell fill="#f1f5f9" />
-                                </Pie>
-                            </PieChart>
+                            <PieChart><Pie data={data} innerRadius={45} outerRadius={60} paddingAngle={5} dataKey="value" startAngle={90} endAngle={-270} stroke="none"><Cell fill={color} /><Cell fill="#f1f5f9" /></Pie></PieChart>
                         </ResponsiveContainer>
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <span className="text-3xl font-black text-slate-700">{percent}%</span>
-                        </div>
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="text-3xl font-black text-slate-700">{percent}%</span></div>
                     </div>
                 </Card>
             );
@@ -190,7 +172,7 @@
 
         const DocumentStatusGrid = ({ items, docente, requiredItems }) => {
             const relevantItems = items.filter(item => requiredItems.includes(item));
-            if (relevantItems.length === 0) return null;
+            if (!relevantItems.length) return null;
             return (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {relevantItems.map((doc, idx) => {
@@ -199,15 +181,13 @@
                         const hasObs = docData.obs && docData.obs.length > 0;
                         const percent = docData.porcentaje !== undefined ? docData.porcentaje : (isDone ? 100 : 0);
                         return (
-                            <div key={idx} className={`relative p-3 rounded-lg border flex flex-col items-center justify-center text-center transition-all min-h-[140px] ${isDone ? (percent < 100 ? 'bg-amber-50 border-amber-300' : 'bg-emerald-50 border-emerald-200') : 'bg-white border-slate-200 opacity-80'}`}>
+                            <div key={idx} className={`relative p-3 rounded-lg border flex flex-col items-center justify-center text-center min-h-[140px] transition-all ${isDone ? (percent < 100 ? 'bg-amber-50 border-amber-300' : 'bg-emerald-50 border-emerald-200') : 'bg-white border-slate-200 opacity-80'}`}>
                                 {hasObs && <div className="absolute top-1 right-1 animate-pulse"><Icons.AlertCircle className="w-5 h-5 text-amber-600" /></div>}
                                 <div className="mb-2 relative">
-                                    <div className={`rounded-full p-2 ${isDone ? (percent < 100 ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600') : 'bg-slate-100 text-slate-300'}`}>
-                                        {isDone ? <Icons.CheckCircle2 className="w-6 h-6"/> : <Icons.XCircle className="w-6 h-6"/>}
-                                    </div>
+                                    <div className={`rounded-full p-2 ${isDone ? (percent < 100 ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600') : 'bg-slate-100 text-slate-300'}`}>{isDone ? <Icons.CheckCircle2 className="w-6 h-6"/> : <Icons.XCircle className="w-6 h-6"/>}</div>
                                     {isDone && <div className="absolute -bottom-1 -right-2 bg-slate-800 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{percent}%</div>}
                                 </div>
-                                <span className={`text-xs font-semibold leading-tight mb-2 ${isDone ? 'text-slate-800' : 'text-slate-400'}`}>{doc}</span>
+                                <span className={`text-xs font-semibold mb-2 ${isDone ? 'text-slate-800' : 'text-slate-400'}`}>{doc}</span>
                                 {hasObs && <div className="mt-auto w-full"><div className="text-[10px] text-amber-900 bg-amber-100 p-2 rounded border border-amber-200 text-left line-clamp-3 italic">"{docData.obs}"</div></div>}
                             </div>
                         )
@@ -216,11 +196,13 @@
             );
         };
 
-        // --- APP PRINCIPAL ---
         const App = () => {
+            // Estados
             const [user, setUser] = useState(null);
             const [docentes, setDocentes] = useState([]);
             const [isLoading, setIsLoading] = useState(true);
+            const [errorMsg, setErrorMsg] = useState("");
+            
             const [activeTab, setActiveTab] = useState('dashboard');
             const [selectedDashboardId, setSelectedDashboardId] = useState("");
             const [teacherViewMode, setTeacherViewMode] = useState('checklist');
@@ -229,87 +211,99 @@
             const [sidebarOpen, setSidebarOpen] = useState(false);
             const [newDocente, setNewDocente] = useState({ nombre: "", rol: ROLES.TUTOR, detalle: "" });
             
-            // --- FIREBASE INIT ---
             const [db, setDb] = useState(null);
-            const [appId, setAppId] = useState(null);
 
+            // 1. Inicialización
             useEffect(() => {
-                const init = async () => {
-                    const checkFirebase = () => {
-                        if (window.FirebaseMods) {
-                            // !!! CONFIGURACIÓN DE FIREBASE: REEMPLAZA ESTO CON TUS DATOS DE CONSOLA !!!
-                            const config = window.__firebase_config ? JSON.parse(window.__firebase_config) : {
-                                // Pega aquí tu objeto de configuración de Firebase console
-                                apiKey: "TU_API_KEY",
-                                authDomain: "tu-proyecto.firebaseapp.com",
-                                projectId: "tu-proyecto",
-                                storageBucket: "tu-proyecto.appspot.com",
-                                messagingSenderId: "123456789",
-                                appId: "1:123456789:web:abcdef"
+                let attempts = 0;
+                const init = () => {
+                    if (window.FirebaseMods) {
+                        try {
+                            // --- TU CONFIGURACIÓN DE FIREBASE ---
+                            const config = {
+                                apiKey: "AIzaSyBZBFUrU6rAAcpDXKetsH3eT2XyZQ2e3Rg",
+                                authDomain: "control-docentes.firebaseapp.com",
+                                projectId: "control-docentes",
+                                storageBucket: "control-docentes.firebasestorage.app",
+                                messagingSenderId: "759330033292",
+                                appId: "1:759330033292:web:ed0bcf6487779b184e75a9"
                             };
                             
-                            try {
-                                const app = window.FirebaseMods.initializeApp(config);
-                                const auth = window.FirebaseMods.getAuth(app);
-                                const firestore = window.FirebaseMods.getFirestore(app);
-                                const currentAppId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
-                                
-                                setDb(firestore);
-                                setAppId(currentAppId);
+                            const app = window.FirebaseMods.initializeApp(config);
+                            const auth = window.FirebaseMods.getAuth(app);
+                            const firestore = window.FirebaseMods.getFirestore(app);
+                            setDb(firestore);
 
-                                // Autenticación mejorada para evitar errores de permisos
-                                if (typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token) {
-                                    // Para entorno de vista previa: Usar token seguro
-                                    window.FirebaseMods.signInWithCustomToken(auth, window.__initial_auth_token).catch(e => console.error("Error Custom Auth:", e));
-                                } else {
-                                    // Para producción/GitHub: Usar anónimo
-                                    window.FirebaseMods.signInAnonymously(auth).catch(e => console.error("Error Anon Auth:", e));
+                            const doAuth = async () => {
+                                try {
+                                    await window.FirebaseMods.signInAnonymously(auth);
+                                } catch (authErr) {
+                                    console.error("Auth Error:", authErr);
+                                    setErrorMsg("Error Auth: " + authErr.message);
+                                    setIsLoading(false);
                                 }
-                                
-                                window.FirebaseMods.onAuthStateChanged(auth, setUser);
-                            } catch (e) {
-                                console.error("Error inicializando Firebase:", e);
-                                // Fallback para UI
-                                setIsLoading(false);
-                            }
-                        } else {
-                            setTimeout(checkFirebase, 100);
+                            };
+                            doAuth();
+
+                            window.FirebaseMods.onAuthStateChanged(auth, (u) => {
+                                setUser(u);
+                                if (u) setIsLoading(false);
+                            });
+
+                        } catch (e) {
+                            console.error("Init Error:", e);
+                            setErrorMsg("Error: " + e.message);
+                            setIsLoading(false);
                         }
-                    };
-                    checkFirebase();
+                    } else {
+                        attempts++;
+                        if(attempts < 50) setTimeout(init, 100);
+                        else {
+                            setErrorMsg("No se pudo cargar Firebase.");
+                            setIsLoading(false);
+                        }
+                    }
                 };
                 init();
             }, []);
 
+            // 2. Listener de Datos
             useEffect(() => {
                 if (!user || !db) return;
                 const { collection, onSnapshot } = window.FirebaseMods;
-                const collectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'docentes');
-                const unsubscribe = onSnapshot(collectionRef, (snapshot) => {
-                    const docsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    docsData.sort((a, b) => a.nombre.localeCompare(b.nombre));
-                    setDocentes(docsData);
-                    setIsLoading(false);
-                }, (err) => {
-                    console.error("Error leyendo datos:", err);
-                    setIsLoading(false);
-                });
+                
+                const colRef = collection(db, 'docentes');
+                
+                const unsubscribe = onSnapshot(colRef, 
+                    (snapshot) => {
+                        const docsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        docsData.sort((a, b) => a.nombre.localeCompare(b.nombre));
+                        setDocentes(docsData);
+                        setIsLoading(false);
+                        setErrorMsg(""); 
+                    }, 
+                    (err) => {
+                        console.error("Snapshot Error:", err);
+                        setErrorMsg("Error de datos: " + err.message);
+                        setIsLoading(false);
+                    }
+                );
                 return () => unsubscribe();
-            }, [user, db, appId]);
+            }, [user, db]);
 
-            // --- HANDLERS ---
+            // Handlers
             const handleAddDocente = async (e) => {
                 e.preventDefault();
-                if (!user) return alert("Esperando conexión a base de datos...");
-                if (!newDocente.nombre.trim()) return alert("Ingrese un nombre");
+                if (!user) return alert("Sin conexión");
+                if (!newDocente.nombre.trim()) return alert("Nombre requerido");
                 const { addDoc, collection } = window.FirebaseMods;
                 try {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'docentes'), {
-                        nombre: newDocente.nombre, rol: newDocente.rol, detalle: newDocente.detalle, documentos: {}, observaciones_generales: "", createdAt: new Date().toISOString()
+                    await addDoc(collection(db, 'docentes'), {
+                        nombre: newDocente.nombre, rol: newDocente.rol, detalle: newDocente.detalle, documentos: {}, createdAt: new Date().toISOString()
                     });
                     setNewDocente({ nombre: "", rol: ROLES.TUTOR, detalle: "" });
-                    alert("Guardado");
-                } catch(e) { console.error(e); alert("Error guardando"); }
+                    alert("Docente registrado.");
+                } catch(e) { console.error(e); alert("Error al guardar"); }
             };
 
             const handleImportarDocentes = async () => {
@@ -324,85 +318,86 @@
                         const r = parts[1]?.toLowerCase() || "";
                         if (r.includes("área") || r.includes("area")) rol = ROLES.AREA;
                         if (r.includes("regencia")) rol = ROLES.REGENCIA;
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'docentes'), {
+                        await addDoc(collection(db, 'docentes'), {
                             nombre: parts[0].trim(), rol, detalle: parts[2]?.trim() || "Sin asignar", documentos: {}, createdAt: new Date().toISOString()
                         });
                         count++;
                     }
                 }
                 setImportText(""); setShowImport(false);
-                alert(`Importados ${count} docentes.`);
+                alert(`Importados ${count} registros.`);
             };
 
             const updateDocenteData = async (id, newData) => {
                 if (!user) return;
                 const { doc, updateDoc } = window.FirebaseMods;
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'docentes', id), { documentos: newData });
+                try { await updateDoc(doc(db, 'docentes', id), { documentos: newData }); } catch(e) { console.error(e); }
             };
 
-            const toggleDocumento = (docenteId, docName) => {
-                const doc = docentes.find(d => d.id === docenteId);
+            const toggleDocumento = (id, docName) => {
+                const doc = docentes.find(d => d.id === id);
                 const current = doc.documentos?.[docName] || { entregado: false, obs: "", porcentaje: 0 };
                 const newState = !current.entregado;
-                updateDocenteData(docenteId, { ...doc.documentos, [docName]: { ...current, entregado: newState, porcentaje: newState ? 100 : 0 } });
+                updateDocenteData(id, { ...doc.documentos, [docName]: { ...current, entregado: newState, porcentaje: newState ? 100 : 0 } });
             };
 
-            const updateItemObservation = (docenteId, docName, text) => {
-                const doc = docentes.find(d => d.id === docenteId);
+            const onUpdateObs = (id, docName, val) => {
+                const doc = docentes.find(d => d.id === id);
                 const current = doc.documentos?.[docName] || { entregado: false, obs: "", porcentaje: 0 };
-                updateDocenteData(docenteId, { ...doc.documentos, [docName]: { ...current, obs: text } });
+                updateDocenteData(id, { ...doc.documentos, [docName]: { ...current, obs: val } });
             };
 
-            const updateItemPercent = (docenteId, docName, val) => {
-                const doc = docentes.find(d => d.id === docenteId);
+            const onUpdatePercent = (id, docName, val) => {
+                const doc = docentes.find(d => d.id === id);
                 const current = doc.documentos?.[docName] || { entregado: false, obs: "", porcentaje: 0 };
-                updateDocenteData(docenteId, { ...doc.documentos, [docName]: { ...current, porcentaje: val } });
+                updateDocenteData(id, { ...doc.documentos, [docName]: { ...current, porcentaje: val } });
             };
 
             const handleDeleteDocente = async (id) => {
-                if(confirm("¿Eliminar?")) {
+                if(confirm("¿Eliminar registro?")) {
                     const { deleteDoc, doc } = window.FirebaseMods;
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'docentes', id));
+                    await deleteDoc(doc(db, 'docentes', id));
                     if(selectedDashboardId === id) setSelectedDashboardId("");
                 }
             };
 
-            // Cálculos
-            const getRequeridos = (rol) => ({ notas: REGLAS_ASIGNACION[rol]?.registro_notas || [], adicionales: REGLAS_ASIGNACION[rol]?.adicionales || [], todos: [...(REGLAS_ASIGNACION[rol]?.registro_notas || []), ...(REGLAS_ASIGNACION[rol]?.adicionales || [])] });
+            const getRequeridos = (rol) => { return REGLAS_ASIGNACION[rol]?.docs || []; };
+
             const calcularProgreso = (d) => {
-                const req = getRequeridos(d.rol).todos;
-                if (!req.length) return 0;
-                let sum = 0;
-                req.forEach(name => { const data = d.documentos?.[name]; if (data?.entregado) sum += (data.porcentaje ?? 100); });
-                return Math.round(sum / req.length);
+                const requiredDocs = getRequeridos(d.rol);
+                if (!requiredDocs.length) return 0;
+                let sumPercentages = 0;
+                requiredDocs.forEach(docName => {
+                    const data = d.documentos?.[docName];
+                    if (data && data.entregado) sumPercentages += (data.porcentaje !== undefined ? data.porcentaje : 100);
+                });
+                return Math.round(sumPercentages / requiredDocs.length);
             };
 
-            // PDF (Versión Simplificada para Web)
             const generatePDFReport = () => {
                 const w = window.open('', '_blank');
-                let html = `<html><head><title>Reporte</title><style>body{font-family:sans-serif;padding:20px;} table{width:100%;border-collapse:collapse;margin-bottom:20px;} th,td{border:1px solid #ccc;padding:8px;text-align:left;} .ok{color:green;} .pend{color:red;} .parcial{color:orange;}</style></head><body><h1>Reporte Docente</h1><p>Generado: ${new Date().toLocaleString()}</p>`;
+                let html = `<html><head><title>Reporte Docente</title><style>body{font-family:'Segoe UI',sans-serif;padding:40px;color:#333;}h1{color:#1e40af;border-bottom:2px solid #1e40af;padding-bottom:10px;}.card{border:1px solid #e2e8f0;margin-bottom:20px;border-radius:8px;overflow:hidden;page-break-inside:avoid;}.header{background:#f8fafc;padding:15px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;}.name{font-weight:bold;font-size:1.1em;}.role{color:#64748b;font-size:0.9em;}table{width:100%;border-collapse:collapse;font-size:0.9em;}td,th{padding:8px 15px;border-bottom:1px solid #f1f5f9;text-align:left;}th{background:#f1f5f9;color:#64748b;font-weight:600;}.status-ok{color:#059669;font-weight:bold;}.status-parcial{color:#d97706;font-weight:bold;}.status-pending{color:#dc2626;font-weight:bold;}.obs{color:#b45309;font-style:italic;background:#fffbeb;padding:2px 6px;border-radius:4px;}</style></head><body><h1>Reporte de Seguimiento Docente</h1><p>Generado el: ${new Date().toLocaleString()}</p>`;
                 docentes.forEach(d => {
                     const prog = calcularProgreso(d);
-                    html += `<h3>${d.nombre} (${d.rol}) - ${prog}%</h3><table><tr><th>Documento</th><th>Estado</th><th>Obs</th></tr>`;
-                    getRequeridos(d.rol).todos.forEach(doc => {
+                    html += `<div class="card"><div class="header"><div><div class="name">${d.nombre}</div><div class="role">${d.detalle}</div></div><div style="text-align:right"><div>${d.rol}</div><strong>Avance: ${prog}%</strong></div></div><table><tr><th>Documento</th><th>Estado</th><th>Observaciones</th></tr>`;
+                    getRequeridos(d.rol).forEach(doc => {
                         const data = d.documentos?.[doc] || {};
-                        let status = "PENDIENTE";
-                        let css = "pend";
+                        let st = "PENDIENTE", cl = "status-pending";
                         if(data.entregado) {
-                            const pct = data.porcentaje ?? 100;
-                            if(pct < 100) { status = `PARCIAL (${pct}%)`; css = "parcial"; }
-                            else { status = "ENTREGADO"; css = "ok"; }
+                            const p = data.porcentaje ?? 100;
+                            if(p < 100) { st = `PARCIAL (${p}%)`; cl = "status-parcial"; } else { st = "ENTREGADO"; cl = "status-ok"; }
                         }
-                        html += `<tr><td>${doc}</td><td class="${css}">${status}</td><td>${data.obs || '-'}</td></tr>`;
+                        html += `<tr><td width="40%">${doc}</td><td width="20%" class="${cl}">${st}</td><td width="40%">${data.obs ? `<span class="obs">${data.obs}</span>` : '-'}</td></tr>`;
                     });
-                    html += `</table>`;
+                    html += `</table></div>`;
                 });
                 html += `<script>window.onload=()=>window.print()<\/script></body></html>`;
                 w.document.write(html);
                 w.document.close();
             };
 
-            if (isLoading) return <div className="flex h-screen items-center justify-center text-slate-500 font-bold"><Icons.Loader2 className="animate-spin mr-2"/> Conectando Sistema...</div>;
+            if (isLoading) return <div className="flex h-screen items-center justify-center text-slate-500 font-bold"><Icons.Loader2 className="animate-spin mr-2"/> Cargando...</div>;
+            if (errorMsg) return <div className="flex h-screen items-center justify-center text-red-500 font-bold p-10 text-center"><Icons.AlertCircle className="mr-2"/> {errorMsg} <br/><button onClick={()=>window.location.reload()} className="mt-4 underline">Recargar</button></div>;
 
             const docenteSeleccionado = docentes.find(d => String(d.id) === String(selectedDashboardId));
             const progresoTotal = docenteSeleccionado ? calcularProgreso(docenteSeleccionado) : 0;
@@ -411,25 +406,25 @@
                 <div className="flex flex-col h-screen overflow-hidden">
                     <header className="bg-slate-900 text-white shadow-lg z-50 flex-shrink-0 h-16">
                         <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
-                            <div className="flex items-center"><Icons.FileCheck className="w-8 h-8 mr-2 text-blue-400" /><span className="font-bold text-xl">DOCENTE<span className="text-blue-400">CHECK</span></span></div>
-                            <div className="hidden md:flex items-center space-x-1">
-                                <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:text-white'}`}><Icons.PieChart className="w-4 h-4 inline mr-2"/> Dashboard</button>
-                                <button onClick={() => setActiveTab('lista')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'lista' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:text-white'}`}><Icons.Users className="w-4 h-4 inline mr-2"/> Lista</button>
+                            <div className="flex items-center"><Icons.FileCheck className="w-8 h-8 mr-2 text-blue-400" /><span className="font-bold text-xl hidden md:inline">DOCENTE<span className="text-blue-400">CHECK</span></span></div>
+                            <div className="hidden md:flex items-center space-x-2">
+                                <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}><Icons.PieChart className="w-4 h-4 inline mr-2"/> Dashboard</button>
+                                <button onClick={() => setActiveTab('lista')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'lista' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-300 hover:text-white hover:bg-slate-800'}`}><Icons.Users className="w-4 h-4 inline mr-2"/> Gestión Lista</button>
                             </div>
-                            <div><button onClick={generatePDFReport} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center"><Icons.Printer className="w-4 h-4 mr-2"/> PDF</button></div>
+                            <div><button onClick={generatePDFReport} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center shadow-lg shadow-red-900/20 transition-transform hover:scale-105"><Icons.Printer className="w-4 h-4 mr-2"/> PDF</button></div>
                             <button className="md:hidden text-slate-300" onClick={() => setSidebarOpen(!sidebarOpen)}>{sidebarOpen ? <Icons.X/> : <Icons.Menu/>}</button>
                         </div>
                     </header>
-                    {sidebarOpen && <div className="md:hidden bg-slate-800 text-white p-4 absolute top-16 w-full z-40"><button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false)}} className="block w-full text-left py-2 font-bold">Dashboard</button><button onClick={() => {setActiveTab('lista'); setSidebarOpen(false)}} className="block w-full text-left py-2 font-bold">Lista</button></div>}
+                    {sidebarOpen && <div className="md:hidden bg-slate-800 text-white p-4 absolute top-16 w-full z-40 shadow-xl border-t border-slate-700"><button onClick={() => {setActiveTab('dashboard'); setSidebarOpen(false)}} className="block w-full text-left py-3 px-4 font-bold hover:bg-slate-700 rounded mb-2">Dashboard</button><button onClick={() => {setActiveTab('lista'); setSidebarOpen(false)}} className="block w-full text-left py-3 px-4 font-bold hover:bg-slate-700 rounded">Lista</button></div>}
                     
                     <main className="flex-1 overflow-auto bg-slate-50 p-4 md:p-8">
-                        <div className="max-w-7xl mx-auto">
+                        <div className="max-w-7xl mx-auto pb-20">
                             {activeTab === 'dashboard' ? (
-                                <div className="animate-fade-in space-y-6 pb-20">
+                                <div className="animate-fade-in space-y-6">
                                     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                                         <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Seleccionar Docente:</label>
                                         <div className="relative">
-                                            <select className="w-full p-4 pl-4 pr-10 text-lg font-medium border border-slate-300 rounded-xl outline-none bg-slate-50" value={selectedDashboardId} onChange={(e) => { setSelectedDashboardId(e.target.value); setTeacherViewMode('graficos'); }}>
+                                            <select className="w-full p-4 pl-4 pr-10 text-lg font-medium border border-slate-300 rounded-xl outline-none bg-slate-50 focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer hover:bg-white" value={selectedDashboardId} onChange={(e) => { setSelectedDashboardId(e.target.value); setTeacherViewMode('graficos'); }}>
                                                 <option value="">-- Seleccionar --</option>
                                                 {docentes.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
                                             </select>
@@ -439,29 +434,23 @@
                                     </div>
 
                                     {!docenteSeleccionado ? (
-                                        <div className="text-center py-20 bg-slate-50 border-2 border-dashed border-slate-300 rounded-3xl"><Icons.Users className="w-16 h-16 text-slate-300 mx-auto mb-4"/><h3 className="text-xl font-bold text-slate-600">Selecciona un docente</h3><div className="mt-4 text-xs text-slate-400"><Icons.Cloud className="w-4 h-4 inline mr-1"/>Datos en nube</div></div>
+                                        <div className="text-center py-20 bg-slate-50 border-2 border-dashed border-slate-300 rounded-3xl"><Icons.Users className="w-16 h-16 text-slate-300 mx-auto mb-4"/><h3 className="text-xl font-bold text-slate-600">Selecciona un docente</h3></div>
                                     ) : (
                                         <>
-                                            <div className="flex p-1 bg-slate-200/50 rounded-xl w-full md:w-fit mx-auto mb-8">
-                                                <button onClick={() => setTeacherViewMode('graficos')} className={`flex-1 px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center ${teacherViewMode === 'graficos' ? 'bg-white text-blue-600 shadow' : 'text-slate-500'}`}><Icons.PieChart className="w-4 h-4 mr-2"/> Gráficos</button>
-                                                <button onClick={() => setTeacherViewMode('checklist')} className={`flex-1 px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center ${teacherViewMode === 'checklist' ? 'bg-white text-blue-600 shadow' : 'text-slate-500'}`}><Icons.ListChecks className="w-4 h-4 mr-2"/> Evaluar</button>
+                                            <div className="flex p-1 bg-white border border-slate-200 rounded-xl w-full md:w-fit mx-auto mb-8 shadow-sm">
+                                                <button onClick={() => setTeacherViewMode('graficos')} className={`flex-1 px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center ${teacherViewMode === 'graficos' ? 'bg-blue-600 text-white shadow' : 'text-slate-500'}`}><Icons.PieChart className="w-4 h-4 mr-2"/> Gráficos</button>
+                                                <button onClick={() => setTeacherViewMode('checklist')} className={`flex-1 px-6 py-3 rounded-lg text-sm font-bold flex items-center justify-center ${teacherViewMode === 'checklist' ? 'bg-blue-600 text-white shadow' : 'text-slate-500'}`}><Icons.ListChecks className="w-4 h-4 mr-2"/> Checklist</button>
                                             </div>
                                             {teacherViewMode === 'graficos' ? (
                                                 <div className="animate-fade-in space-y-6">
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                        <ChartCard title="Progreso General" percent={progresoTotal} color="#3b82f6" />
-                                                    </div>
-                                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                                        <Card className="p-6 border-t-4 border-t-emerald-500"><h3 className="font-bold mb-4">Registro Pedagógico</h3><DocumentStatusGrid items={GRUPO_REGISTRO_NOTAS.items} docente={docenteSeleccionado} requiredItems={getRequeridos(docenteSeleccionado.rol).notas} /></Card>
-                                                        <Card className="p-6 border-t-4 border-t-violet-500"><h3 className="font-bold mb-4">Administrativo</h3><DocumentStatusGrid items={GRUPO_DOCUMENTOS_ADICIONALES.items} docente={docenteSeleccionado} requiredItems={getRequeridos(docenteSeleccionado.rol).adicionales} /></Card>
-                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><ChartCard title="Progreso General" percent={progresoTotal} color={progresoTotal < 50 ? '#ef4444' : '#10b981'} /></div>
+                                                    <Card className="p-6 border-t-4 border-t-indigo-500"><h3 className="font-bold text-slate-700 mb-6">Estado de Documentos</h3><DocumentStatusGrid items={getRequeridos(docenteSeleccionado.rol)} docente={docenteSeleccionado} requiredItems={getRequeridos(docenteSeleccionado.rol)} /></Card>
                                                 </div>
                                             ) : (
                                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
                                                     <div className="lg:col-span-2 space-y-8">
-                                                        <Card className="p-8">
-                                                            <ChecklistGroup title={GRUPO_REGISTRO_NOTAS.titulo} items={GRUPO_REGISTRO_NOTAS.items} docente={docenteSeleccionado} requiredItems={getRequeridos(docenteSeleccionado.rol).notas} onToggle={toggleDocumento} onUpdateObs={updateItemObservation} onUpdatePercent={updateItemPercent} />
-                                                            <ChecklistGroup title={GRUPO_DOCUMENTOS_ADICIONALES.titulo} items={GRUPO_DOCUMENTOS_ADICIONALES.items} docente={docenteSeleccionado} requiredItems={getRequeridos(docenteSeleccionado.rol).adicionales} onToggle={toggleDocumento} onUpdateObs={updateItemObservation} onUpdatePercent={updateItemPercent} />
+                                                        <Card className="p-8 border-t-4 border-t-blue-500">
+                                                            <ChecklistGroup title="DOCUMENTOS REQUERIDOS" items={DOCS_POSIBLES} docente={docenteSeleccionado} requiredItems={getRequeridos(docenteSeleccionado.rol)} onToggle={toggleDocumento} onUpdateObs={onUpdateObs} onUpdatePercent={onUpdatePercent} />
                                                         </Card>
                                                     </div>
                                                 </div>
@@ -470,21 +459,21 @@
                                     )}
                                 </div>
                             ) : (
-                                <div className="space-y-8 animate-fade-in pb-20">
+                                <div className="space-y-8 animate-fade-in">
                                     <Card className="p-8 bg-white border-slate-200">
                                         <div className="flex justify-between items-center mb-6"><h3 className="text-lg font-bold flex items-center"><Icons.Plus className="w-5 h-5 mr-2 text-blue-600"/> Registrar Docente</h3><button onClick={() => setShowImport(!showImport)} className="text-sm bg-slate-100 px-4 py-2 rounded-lg font-bold flex items-center"><Icons.FileSpreadsheet className="w-4 h-4 mr-2"/> {showImport ? 'Cerrar' : 'Importar'}</button></div>
                                         {showImport ? (
                                             <div className="bg-slate-50 p-6 rounded-xl border border-dashed border-slate-300"><textarea className="w-full h-32 p-3 text-sm border rounded-lg" placeholder={"Juan Perez\tDocente Tutor\t5to A"} value={importText} onChange={e => setImportText(e.target.value)}></textarea><div className="mt-4 flex justify-end"><button onClick={handleImportarDocentes} className="bg-emerald-600 text-white px-6 py-2 rounded-lg font-bold">Procesar</button></div></div>
                                         ) : (
                                             <form onSubmit={handleAddDocente} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                                                <div className="md:col-span-4"><label className="block text-xs font-bold text-slate-500 mb-1">Nombre</label><input type="text" className="w-full p-3 text-sm border rounded-lg" value={newDocente.nombre} onChange={e => setNewDocente({...newDocente, nombre: e.target.value})} required /></div>
+                                                <div className="md:col-span-4"><label className="block text-xs font-bold text-slate-500 mb-1">Nombre</label><input required type="text" className="w-full p-3 text-sm border rounded-lg" value={newDocente.nombre} onChange={e => setNewDocente({...newDocente, nombre: e.target.value})} /></div>
                                                 <div className="md:col-span-3"><label className="block text-xs font-bold text-slate-500 mb-1">Rol</label><select className="w-full p-3 text-sm border rounded-lg bg-white" value={newDocente.rol} onChange={e => setNewDocente({...newDocente, rol: e.target.value, detalle: ""})}>{Object.values(ROLES).map(r => <option key={r} value={r}>{r}</option>)}</select></div>
                                                 <div className="md:col-span-3"><label className="block text-xs font-bold text-slate-500 mb-1">Detalle</label>
                                                     {newDocente.rol === ROLES.TUTOR ? <select className="w-full p-3 text-sm border rounded-lg bg-white" value={newDocente.detalle} onChange={e => setNewDocente({...newDocente, detalle: e.target.value})}><option value="">-- Grado --</option>{GRADOS_TUTORIA.map(g => <option key={g} value={g}>{g}</option>)}</select> : 
                                                      newDocente.rol === ROLES.AREA ? <select className="w-full p-3 text-sm border rounded-lg bg-white" value={newDocente.detalle} onChange={e => setNewDocente({...newDocente, detalle: e.target.value})}><option value="">-- Área --</option>{AREAS_CURRICULARES.map(a => <option key={a} value={a}>{a}</option>)}</select> : 
-                                                     <input type="text" className="w-full p-3 text-sm border rounded-lg" value={newDocente.detalle} onChange={e => setNewDocente({...newDocente, detalle: e.target.value})} required />}
+                                                     <input required type="text" className="w-full p-3 text-sm border rounded-lg" value={newDocente.detalle} onChange={e => setNewDocente({...newDocente, detalle: e.target.value})} />}
                                                 </div>
-                                                <div className="md:col-span-2"><button type="submit" className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold">Agregar</button></div>
+                                                <div className="md:col-span-2"><button type="submit" className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold">+ Agregar</button></div>
                                             </form>
                                         )}
                                     </Card>
