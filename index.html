@@ -5,18 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Seguimiento Docente</title>
     
-    <!-- 1. LIBRERÍAS (Versiones Compatibles y Estables) -->
+    <!-- 1. Estilos y Librerías React -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
     <script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-    <!-- 2. FIREBASE (Versión Compat Universal - Carga segura) -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 
     <style>
         body { background-color: #f8fafc; font-family: 'Segoe UI', sans-serif; }
@@ -26,13 +21,48 @@
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        @media print { .no-print { display: none !important; } .print-only { display: block !important; } body { background: white; } }
+        @media print { .no-print { display: none !important; } .print-only { display: block !important; } .card { break-inside: avoid; } }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <!-- 3. APLICACIÓN -->
+    <!-- 2. Inicialización de Firebase (Módulo Seguro) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        // TUS CREDENCIALES
+        const firebaseConfig = {
+            apiKey: "AIzaSyBZBFUrU6rAAcpDXKetsH3eT2XyZQ2e3Rg",
+            authDomain: "control-docentes.firebaseapp.com",
+            projectId: "control-docentes",
+            storageBucket: "control-docentes.firebasestorage.app",
+            messagingSenderId: "759330033292",
+            appId: "1:759330033292:web:ed0bcf6487779b184e75a9"
+        };
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+            const auth = getAuth(app);
+
+            // Exponer servicios al objeto window de forma segura
+            window.AppServices = {
+                db, auth, 
+                ops: { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, signInAnonymously, onAuthStateChanged, signInWithCustomToken }
+            };
+            
+            console.log("Firebase inicializado correctamente.");
+            window.dispatchEvent(new Event('firebase-ready'));
+        } catch (error) {
+            console.error("Error crítico inicializando Firebase:", error);
+            window.firebaseError = error.message;
+        }
+    </script>
+
+    <!-- 3. Aplicación React -->
     <script type="text/babel">
         // --- ICONOS ---
         const Icon = ({ d, className, ...props }) => (
@@ -60,17 +90,20 @@
             XCircle: (p) => <Icon d={["M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z", "m15 9-6 6", "m9 9 6 6"]} {...p} />,
             Cloud: (p) => <Icon d={["M17.5 19c0-3.037-2.463-5.5-5.5-5.5S6.5 15.963 6.5 19", "M17.5 19H19a5 5 0 0 0 0-10 7.5 7.5 0 0 0-13 3 5 5 0 0 0 2 9h1.5"]} {...p} />,
             Loader2: (p) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={p.className}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>,
-            RefreshCcw: (p) => <Icon d={["M21 2v6h-6", "M3 12a9 9 0 0 1 15-6.7L21 8", "M3 22v-6h6", "M21 12a9 9 0 0 1-15 6.7L3 16"]} {...p} />
+            RefreshCcw: (p) => <Icon d={["M21 2v6h-6", "M3 12a9 9 0 0 1 15-6.7L21 8", "M3 22v-6h6", "M21 12a9 9 0 0 1-15 6.7L3 16"]} {...p} />,
+            Filter: (p) => <Icon d={["M22 3H2l8 9.46V19l4 2v-8.54L22 3z"]} {...p} />
         };
 
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useMemo } = React;
         const RechartsObj = window.Recharts || {};
         const { PieChart, Pie, Cell, ResponsiveContainer } = RechartsObj;
 
-        // --- DATOS CONSTANTES ---
-        const ROLES = { TUTOR: "Docente Tutor", AREA: "Docente Área a Cargo", REGENCIA: "Regencia" };
+        // --- CONFIGURACIÓN ---
+        const ROLES_KEYS = { TUTOR: "Docente Tutor", AREA: "Docente Área a Cargo", REGENCIA: "Regencia" };
+        
         const GRADOS_TUTORIA = ["Inicial 3 años", "Inicial 4 años", "Inicial 5 años", "Primero Primaria", "Segundo Primaria", "Tercero Primaria", "Cuarto Primaria", "Quinto Primaria", "Sexto Primaria", "Primero Secundaria", "Segundo Secundaria", "Tercero Secundaria", "Cuarto Secundaria", "Quinto Secundaria"];
         const AREAS_CURRICULARES = ["EPT", "Matemática", "Comunicación", "Ciencia y Tecnología", "Religión", "DPCYC", "Ciencias Sociales", "Personal Social", "Ed. Física", "Arte", "Inglés"];
+        
         const DOCS_POSIBLES = [
             "Carátula", "Registro de estudiantes", "Asistencia", "Llenado de: (competencias, capacidades, desempeños y criterios)", 
             "Llenado de conclusiones descriptivas", "Llenado de comportamiento", "Llenado de apreciación del tutor",
@@ -78,15 +111,17 @@
             "Registro de HSE y FR", "Informe de HSE y FR", "Informe de Nivel de Logro de Competencia", "Inventario", 
             "Informe de Estudiantes con R.R.", "Informe de Estudiantes con P.G.", "Informe de Tutoría"
         ];
+
         const REGLAS_ASIGNACION = {
-            [ROLES.TUTOR]: { docs: DOCS_POSIBLES },
-            [ROLES.AREA]: { docs: ["Llenado de: (competencias, capacidades, desempeños y criterios)", "Llenado de conclusiones descriptivas", "Formato Oficial de Notas (SIAGIE)", "Conclusiones Descriptivas (SIAGIE)"] },
-            [ROLES.REGENCIA]: { docs: ["Llenado de comportamiento", "Inventario"] }
+            [ROLES_KEYS.TUTOR]: { docs: DOCS_POSIBLES },
+            [ROLES_KEYS.AREA]: { docs: ["Llenado de: (competencias, capacidades, desempeños y criterios)", "Llenado de conclusiones descriptivas", "Formato Oficial de Notas (SIAGIE)", "Conclusiones Descriptivas (SIAGIE)"] },
+            [ROLES_KEYS.REGENCIA]: { docs: ["Llenado de comportamiento", "Inventario"] }
         };
 
         const Card = ({ children, className = "" }) => <div className={`bg-white rounded-xl shadow-sm border border-slate-200 ${className}`}>{children}</div>;
-        const Badge = ({ children, type = "neutral" }) => <span className={`px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700`}>{children}</span>;
+        const Badge = ({ children, type = "neutral" }) => <span className={`px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 mr-1`}>{children}</span>;
 
+        // Componente: Checklist
         const ChecklistGroup = ({ title, items, docente, requiredItems, onToggle, onUpdateObs, onUpdatePercent }) => {
             const relevantItems = items.filter(item => requiredItems.includes(item));
             if (!relevantItems.length) return null;
@@ -109,10 +144,10 @@
                                                 {isChecked && <Icons.CheckSquare className="w-5 h-5" />}
                                             </div>
                                             <div className="flex-1">
-                                                <div className="cursor-pointer font-medium" onClick={() => onToggle(docente.id, docName)}>{docName}</div>
+                                                <div className="cursor-pointer font-medium text-slate-800" onClick={() => onToggle(docente.id, docName)}>{docName}</div>
                                                 {(isChecked && hasObs) && (
                                                     <div className="mt-2 flex items-center animate-fade-in bg-white/50 p-2 rounded-lg">
-                                                        <span className="text-xs font-bold text-slate-500 mr-2 uppercase">Calif:</span>
+                                                        <span className="text-xs font-bold text-slate-500 mr-2 uppercase">Calificación:</span>
                                                         <input type="range" min="0" max="100" value={currentPercent} onChange={(e) => onUpdatePercent(docente.id, docName, parseInt(e.target.value))} className="w-32 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 mr-2" />
                                                         <span className={`text-xs font-bold px-2 py-0.5 rounded ${currentPercent < 100 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{currentPercent}%</span>
                                                     </div>
@@ -135,15 +170,30 @@
 
         const ChartCard = ({ title, percent, color }) => {
             const data = [{ name: 'Completado', value: percent }, { name: 'Pendiente', value: 100 - percent }];
-            if (!PieChart || !ResponsiveContainer) return <Card className="p-6 flex flex-col items-center justify-center h-48"><h3 className="text-sm font-bold text-slate-500 mb-4">{title}</h3><div className="text-4xl font-black text-slate-700">{percent}%</div></Card>;
+            
+            if (!PieChart || !ResponsiveContainer) {
+                return (
+                    <Card className="p-6 flex flex-col items-center justify-center h-48">
+                        <h3 className="text-sm font-bold text-slate-500 mb-4">{title}</h3>
+                        <div className="text-4xl font-black text-slate-700">{percent}%</div>
+                    </Card>
+                );
+            }
+
             return (
                 <Card className="p-6 flex flex-col items-center justify-center overflow-hidden">
                     <h3 className="text-sm font-bold text-slate-500 mb-4 z-10">{title}</h3>
-                    <div className="h-40 w-full relative z-10">
+                    <div className="h-64 w-full relative z-10">
                         <ResponsiveContainer width="100%" height="100%">
-                            <PieChart><Pie data={data} innerRadius={45} outerRadius={60} paddingAngle={5} dataKey="value" startAngle={90} endAngle={-270} stroke="none"><Cell fill={color} /><Cell fill="#f1f5f9" /></Pie></PieChart>
+                            <PieChart>
+                                <Pie data={data} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" startAngle={90} endAngle={-270} stroke="none">
+                                    <Cell fill={color} /><Cell fill="#f1f5f9" />
+                                </Pie>
+                            </PieChart>
                         </ResponsiveContainer>
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><span className="text-3xl font-black text-slate-700">{percent}%</span></div>
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <span className="text-4xl font-black text-slate-700">{percent}%</span>
+                        </div>
                     </div>
                 </Card>
             );
@@ -187,60 +237,44 @@
             const [showImport, setShowImport] = useState(false);
             const [importText, setImportText] = useState("");
             const [sidebarOpen, setSidebarOpen] = useState(false);
-            const [newDocente, setNewDocente] = useState({ nombre: "", rol: ROLES.TUTOR, detalle: "" });
+            const [selectedRoleView, setSelectedRoleView] = useState("ALL"); 
+
+            const [newDocente, setNewDocente] = useState({ nombre: "", roles: [], detalle: "" });
             
-            const [db, setDb] = useState(null);
+            const [services, setServices] = useState(null);
 
-            // --- INICIALIZACIÓN (Robustez y Compatibilidad) ---
             useEffect(() => {
-                const init = async () => {
-                    try {
-                        // Configuración de Firebase (Tus credenciales)
-                        const config = {
-                            apiKey: "AIzaSyBZBFUrU6rAAcpDXKetsH3eT2XyZQ2e3Rg",
-                            authDomain: "control-docentes.firebaseapp.com",
-                            projectId: "control-docentes",
-                            storageBucket: "control-docentes.firebasestorage.app",
-                            messagingSenderId: "759330033292",
-                            appId: "1:759330033292:web:ed0bcf6487779b184e75a9"
-                        };
+                const checkFirebase = () => {
+                    if (window.AppServices) {
+                        setServices(window.AppServices);
                         
-                        // Inicialización segura con librería compat
-                        if (!firebase.apps.length) {
-                            firebase.initializeApp(config);
-                        }
-                        const firestore = firebase.firestore();
-                        setDb(firestore);
+                        // Auth anónimo
+                        const { auth, ops } = window.AppServices;
+                        ops.signInAnonymously(auth).catch(err => {
+                            console.error("Auth Error:", err);
+                            setErrorMsg("Error de autenticación. Verifica la consola.");
+                            setIsLoading(false);
+                        });
 
-                        // Auth Anónimo
-                        await firebase.auth().signInAnonymously();
-                        
-                        firebase.auth().onAuthStateChanged((u) => {
+                        ops.onAuthStateChanged(auth, (u) => {
                             setUser(u);
                             if (u) setIsLoading(false);
                         });
-
-                    } catch (e) {
-                        console.error("Firebase Init Error:", e);
-                        setErrorMsg("Error iniciando: " + e.message);
+                    } else if (window.firebaseError) {
+                        setErrorMsg("Error iniciando Firebase: " + window.firebaseError);
                         setIsLoading(false);
+                    } else {
+                        setTimeout(checkFirebase, 500);
                     }
                 };
-                
-                // Esperar un poco a que carguen los scripts
-                if (window.firebase) {
-                    init();
-                } else {
-                    setTimeout(init, 1000); // Reintentar si el script tarda
-                }
+                checkFirebase();
             }, []);
 
-            // --- LECTURA DE DATOS ---
             useEffect(() => {
-                if (!user || !db) return;
+                if (!user || !services) return;
+                const { db, ops } = services;
                 
-                // Colección raíz para evitar problemas de permisos anidados
-                const unsubscribe = db.collection('docentes').onSnapshot(
+                const unsubscribe = ops.onSnapshot(ops.collection(db, 'docentes'), 
                     (snapshot) => {
                         const docsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                         docsData.sort((a, b) => a.nombre.localeCompare(b.nombre));
@@ -249,48 +283,97 @@
                         setErrorMsg(""); 
                     }, 
                     (err) => {
-                        console.error("Firestore Error:", err);
-                        // Mostrar pero no bloquear
-                        if (err.code === 'permission-denied') {
-                            setErrorMsg("Permiso denegado. Revisa las reglas de Firestore.");
-                        }
+                        console.error("Snapshot Error:", err);
+                        if (err.code === 'permission-denied') setErrorMsg("Permiso denegado. Revisa reglas Firestore.");
                         setIsLoading(false);
                     }
                 );
                 return () => unsubscribe();
-            }, [user, db]);
+            }, [user, services]);
 
-            // --- ACCIONES ---
+            // --- LÓGICA ---
+            const getTeacherRoles = (d) => {
+                if (!d) return [];
+                if (Array.isArray(d.roles) && d.roles.length > 0) return d.roles;
+                if (d.rol) return [d.rol]; 
+                return [];
+            };
+
+            const getRequeridos = (d, roleFilter = "ALL") => {
+                if (!d) return [];
+                const roles = getTeacherRoles(d);
+                let allDocs = new Set();
+                roles.forEach(r => {
+                    if (roleFilter === "ALL" || roleFilter === r) {
+                        const docsForRole = REGLAS_ASIGNACION[r]?.docs || [];
+                        docsForRole.forEach(doc => allDocs.add(doc));
+                    }
+                });
+                return Array.from(allDocs);
+            };
+
+            const calcularProgreso = (d, roleFilter = "ALL") => {
+                const requiredDocs = getRequeridos(d, roleFilter);
+                if (!requiredDocs.length) return 0;
+                let sumPercentages = 0;
+                requiredDocs.forEach(docName => {
+                    const data = d.documentos?.[docName];
+                    if (data && data.entregado) {
+                        sumPercentages += (data.porcentaje !== undefined ? data.porcentaje : 100);
+                    }
+                });
+                return Math.round(sumPercentages / requiredDocs.length);
+            };
+
+            // --- HANDLERS ---
             const handleAddDocente = async (e) => {
                 e.preventDefault();
-                if (!db) return alert("Sin conexión");
+                if (!services) return alert("Sin conexión");
                 if (!newDocente.nombre.trim()) return alert("Nombre requerido");
+                if (newDocente.roles.length === 0) return alert("Seleccione al menos un rol");
+
+                const { db, ops } = services;
                 try {
-                    await db.collection('docentes').add({
-                        nombre: newDocente.nombre, rol: newDocente.rol, detalle: newDocente.detalle, documentos: {}, createdAt: new Date().toISOString()
+                    await ops.addDoc(ops.collection(db, 'docentes'), {
+                        nombre: newDocente.nombre, 
+                        roles: newDocente.roles, 
+                        rol: newDocente.roles[0], 
+                        detalle: newDocente.detalle, 
+                        documentos: {}, 
+                        createdAt: new Date().toISOString()
                     });
-                    setNewDocente({ nombre: "", rol: ROLES.TUTOR, detalle: "" });
+                    setNewDocente({ nombre: "", roles: [], detalle: "" });
                     alert("Docente registrado.");
                 } catch(e) { console.error(e); alert("Error al guardar"); }
             };
 
+            const toggleNewDocenteRole = (role) => {
+                setNewDocente(prev => {
+                    const exists = prev.roles.includes(role);
+                    const newRoles = exists 
+                        ? prev.roles.filter(r => r !== role) 
+                        : [...prev.roles, role];
+                    return { ...prev, roles: newRoles };
+                });
+            };
+
             const handleImportarDocentes = async () => {
-                if (!db || !importText.trim()) return;
+                if (!services || !importText.trim()) return;
+                const { db, ops } = services;
                 const lineas = importText.split('\n');
                 let count = 0;
-                const batch = db.batch(); // Usar batch para eficiencia si son muchos
                 
-                // Nota: Firestore batches max 500 ops. Hacemos uno por uno para simplificar errores
                 for (let linea of lineas) {
                     const parts = linea.split(/\t|,/);
                     if (parts.length >= 1 && parts[0].trim()) {
-                        let rol = ROLES.TUTOR;
-                        const r = parts[1]?.toLowerCase() || "";
-                        if (r.includes("área") || r.includes("area")) rol = ROLES.AREA;
-                        if (r.includes("regencia")) rol = ROLES.REGENCIA;
+                        let roles = [ROLES_KEYS.TUTOR]; 
+                        const rStr = parts[1]?.toLowerCase() || "";
+                        if (rStr.includes("área") || rStr.includes("area")) roles = [ROLES_KEYS.AREA];
+                        if (rStr.includes("regencia")) roles = [ROLES_KEYS.REGENCIA];
                         
-                        await db.collection('docentes').add({
-                            nombre: parts[0].trim(), rol, detalle: parts[2]?.trim() || "Sin asignar", documentos: {}, createdAt: new Date().toISOString()
+                        await ops.addDoc(ops.collection(db, 'docentes'), {
+                            nombre: parts[0].trim(), roles: roles, rol: roles[0],
+                            detalle: parts[2]?.trim() || "Sin asignar", documentos: {}, createdAt: new Date().toISOString()
                         });
                         count++;
                     }
@@ -300,8 +383,9 @@
             };
 
             const updateDocenteData = async (id, newData) => {
-                if (!db) return;
-                try { await db.collection('docentes').doc(id).update({ documentos: newData }); } catch(e) { console.error(e); }
+                if (!services) return;
+                const { db, ops } = services;
+                try { await ops.updateDoc(ops.doc(db, 'docentes', id), { documentos: newData }); } catch(e) { console.error(e); }
             };
 
             const toggleDocumento = (id, docName) => {
@@ -325,31 +409,20 @@
 
             const handleDeleteDocente = async (id) => {
                 if(confirm("¿Eliminar registro?")) {
-                    await db.collection('docentes').doc(id).delete();
+                    const { db, ops } = services;
+                    await ops.deleteDoc(ops.doc(db, 'docentes', id));
                     if(selectedDashboardId === id) setSelectedDashboardId("");
                 }
             };
 
-            const getRequeridos = (rol) => { return REGLAS_ASIGNACION[rol]?.docs || []; };
-
-            const calcularProgreso = (d) => {
-                const requiredDocs = getRequeridos(d.rol);
-                if (!requiredDocs.length) return 0;
-                let sumPercentages = 0;
-                requiredDocs.forEach(docName => {
-                    const data = d.documentos?.[docName];
-                    if (data && data.entregado) sumPercentages += (data.porcentaje !== undefined ? data.porcentaje : 100);
-                });
-                return Math.round(sumPercentages / requiredDocs.length);
-            };
-
             const generatePDFReport = () => {
                 const w = window.open('', '_blank');
-                let html = `<html><head><title>Reporte Docente</title><style>body{font-family:'Segoe UI',sans-serif;padding:40px;color:#333;}h1{color:#1e40af;border-bottom:2px solid #1e40af;padding-bottom:10px;}.card{border:1px solid #e2e8f0;margin-bottom:20px;border-radius:8px;overflow:hidden;page-break-inside:avoid;}.header{background:#f8fafc;padding:15px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;}.name{font-weight:bold;font-size:1.1em;}.role{color:#64748b;font-size:0.9em;}table{width:100%;border-collapse:collapse;font-size:0.9em;}td,th{padding:8px 15px;border-bottom:1px solid #f1f5f9;text-align:left;}th{background:#f1f5f9;color:#64748b;font-weight:600;}.status-ok{color:#059669;font-weight:bold;}.status-parcial{color:#d97706;font-weight:bold;}.status-pending{color:#dc2626;font-weight:bold;}.obs{color:#b45309;font-style:italic;background:#fffbeb;padding:2px 6px;border-radius:4px;}</style></head><body><h1>Reporte de Seguimiento Docente</h1><p>Generado el: ${new Date().toLocaleString()}</p>`;
+                let html = `<html><head><title>Reporte</title><style>body{font-family:'Segoe UI',sans-serif;padding:40px;color:#333;}h1{color:#1e40af;border-bottom:2px solid #1e40af;padding-bottom:10px;}.card{border:1px solid #e2e8f0;margin-bottom:20px;border-radius:8px;overflow:hidden;page-break-inside:avoid;}.header{background:#f8fafc;padding:15px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;}.name{font-weight:bold;font-size:1.1em;}.role{color:#64748b;font-size:0.9em;}table{width:100%;border-collapse:collapse;font-size:0.9em;}td,th{padding:8px 15px;border-bottom:1px solid #f1f5f9;text-align:left;}th{background:#f1f5f9;color:#64748b;font-weight:600;}.status-ok{color:#059669;font-weight:bold;}.status-parcial{color:#d97706;font-weight:bold;}.status-pending{color:#dc2626;font-weight:bold;}.obs{color:#b45309;font-style:italic;background:#fffbeb;padding:2px 6px;border-radius:4px;}</style></head><body><h1>Reporte de Seguimiento</h1><p>Generado el: ${new Date().toLocaleString()}</p>`;
                 docentes.forEach(d => {
                     const prog = calcularProgreso(d);
-                    html += `<div class="card"><div class="header"><div><div class="name">${d.nombre}</div><div class="role">${d.detalle}</div></div><div style="text-align:right"><div>${d.rol}</div><strong>Avance: ${prog}%</strong></div></div><table><tr><th>Documento</th><th>Estado</th><th>Observaciones</th></tr>`;
-                    getRequeridos(d.rol).forEach(doc => {
+                    const rolesStr = getTeacherRoles(d).join(", ");
+                    html += `<div class="card"><div class="header"><div><div class="name">${d.nombre}</div><div class="role">${rolesStr} - ${d.detalle}</div></div><div style="text-align:right"><strong>Avance Global: ${prog}%</strong></div></div><table><tr><th>Documento</th><th>Estado</th><th>Observaciones</th></tr>`;
+                    getRequeridos(d, "ALL").forEach(doc => {
                         const data = d.documentos?.[doc] || {};
                         let st = "PENDIENTE", cl = "status-pending";
                         if(data.entregado) {
@@ -365,12 +438,13 @@
                 w.document.close();
             };
 
-            // UI de carga y error
+            // --- RENDER ---
             if (isLoading) return <div className="flex h-screen items-center justify-center text-slate-500 font-bold flex-col bg-slate-50"><Icons.Loader2 className="animate-spin w-12 h-12 mb-4 text-blue-600"/><p>Conectando...</p></div>;
             if (errorMsg) return <div className="flex h-screen items-center justify-center text-red-500 font-bold p-10 text-center flex-col"><Icons.AlertCircle className="w-16 h-16 mb-4"/><h2 className="text-xl mb-2">Aviso del Sistema</h2><p className="font-normal text-sm mb-4 bg-red-50 p-4 rounded border border-red-100">{errorMsg}</p><button onClick={()=>window.location.reload()} className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">Reintentar</button></div>;
 
             const docenteSeleccionado = docentes.find(d => String(d.id) === String(selectedDashboardId));
-            const progresoTotal = docenteSeleccionado ? calcularProgreso(docenteSeleccionado) : 0;
+            const activeRoles = getTeacherRoles(docenteSeleccionado);
+            const progresoTotal = docenteSeleccionado ? calcularProgreso(docenteSeleccionado, selectedRoleView) : 0;
 
             return (
                 <div className="flex flex-col h-screen overflow-hidden">
@@ -394,13 +468,35 @@
                                     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
                                         <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Seleccionar Docente:</label>
                                         <div className="relative">
-                                            <select className="w-full p-4 pl-4 pr-10 text-lg font-medium border border-slate-300 rounded-xl outline-none bg-slate-50 focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer hover:bg-white" value={selectedDashboardId} onChange={(e) => { setSelectedDashboardId(e.target.value); setTeacherViewMode('graficos'); }}>
+                                            <select className="w-full p-4 pl-4 pr-10 text-lg font-medium border border-slate-300 rounded-xl outline-none bg-slate-50 focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer hover:bg-white" value={selectedDashboardId} onChange={(e) => { setSelectedDashboardId(e.target.value); setTeacherViewMode('graficos'); setSelectedRoleView("ALL"); }}>
                                                 <option value="">-- Seleccionar --</option>
                                                 {docentes.map(d => <option key={d.id} value={d.id}>{d.nombre}</option>)}
                                             </select>
                                             <Icons.ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-6 h-6 pointer-events-none"/>
                                         </div>
-                                        {docenteSeleccionado && <div className="mt-4 flex items-center gap-3 bg-slate-100 p-3 rounded-xl"><div className="h-10 w-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">{docenteSeleccionado.nombre.charAt(0)}</div><div><div className="font-bold text-slate-800">{docenteSeleccionado.nombre}</div><div className="text-xs text-slate-500">{docenteSeleccionado.rol} - {docenteSeleccionado.detalle}</div></div></div>}
+                                        {docenteSeleccionado && (
+                                            <div className="mt-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-slate-100 p-4 rounded-xl border border-slate-200">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="h-12 w-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-md">{docenteSeleccionado.nombre.charAt(0)}</div>
+                                                    <div>
+                                                        <div className="font-bold text-slate-800 text-lg">{docenteSeleccionado.nombre}</div>
+                                                        <div className="text-sm text-slate-500 font-medium flex flex-wrap gap-2">
+                                                            {activeRoles.map(r => <Badge key={r}>{r}</Badge>)}
+                                                            <span className="ml-2 mt-1">{docenteSeleccionado.detalle}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {activeRoles.length > 1 && (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-bold text-slate-500 uppercase"><Icons.Filter className="w-4 h-4 inline mr-1"/> Ver como:</span>
+                                                        <select className="p-2 text-sm border rounded-lg bg-white" value={selectedRoleView} onChange={(e) => setSelectedRoleView(e.target.value)}>
+                                                            <option value="ALL">Todo Combinado</option>
+                                                            {activeRoles.map(r => <option key={r} value={r}>{r}</option>)}
+                                                        </select>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {!docenteSeleccionado ? (
@@ -413,14 +509,14 @@
                                             </div>
                                             {teacherViewMode === 'graficos' ? (
                                                 <div className="animate-fade-in space-y-6">
-                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><ChartCard title="Progreso General" percent={progresoTotal} color={progresoTotal < 50 ? '#ef4444' : '#10b981'} /></div>
-                                                    <Card className="p-6 border-t-4 border-t-indigo-500"><h3 className="font-bold text-slate-700 mb-6">Estado de Documentos</h3><DocumentStatusGrid items={getRequeridos(docenteSeleccionado.rol)} docente={docenteSeleccionado} requiredItems={getRequeridos(docenteSeleccionado.rol)} /></Card>
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6"><ChartCard title="Progreso Vista Actual" percent={progresoTotal} color={progresoTotal < 50 ? '#ef4444' : '#10b981'} /></div>
+                                                    <Card className="p-6 border-t-4 border-t-indigo-500"><h3 className="font-bold text-slate-700 mb-6">Estado de Documentos</h3><DocumentStatusGrid items={getRequeridos(docenteSeleccionado, selectedRoleView)} docente={docenteSeleccionado} requiredItems={getRequeridos(docenteSeleccionado, selectedRoleView)} /></Card>
                                                 </div>
                                             ) : (
                                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
                                                     <div className="lg:col-span-2 space-y-8">
                                                         <Card className="p-8 border-t-4 border-t-blue-500">
-                                                            <ChecklistGroup title="DOCUMENTOS REQUERIDOS" items={DOCS_POSIBLES} docente={docenteSeleccionado} requiredItems={getRequeridos(docenteSeleccionado.rol)} onToggle={toggleDocumento} onUpdateObs={onUpdateObs} onUpdatePercent={onUpdatePercent} />
+                                                            <ChecklistGroup title="DOCUMENTOS REQUERIDOS" items={DOCS_POSIBLES} docente={docenteSeleccionado} requiredItems={getRequeridos(docenteSeleccionado, selectedRoleView)} onToggle={toggleDocumento} onUpdateObs={onUpdateObs} onUpdatePercent={onUpdatePercent} />
                                                         </Card>
                                                     </div>
                                                 </div>
@@ -437,17 +533,27 @@
                                         ) : (
                                             <form onSubmit={handleAddDocente} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                                                 <div className="md:col-span-4"><label className="block text-xs font-bold text-slate-500 mb-1">Nombre</label><input required type="text" className="w-full p-3 text-sm border rounded-lg" value={newDocente.nombre} onChange={e => setNewDocente({...newDocente, nombre: e.target.value})} /></div>
-                                                <div className="md:col-span-3"><label className="block text-xs font-bold text-slate-500 mb-1">Rol</label><select className="w-full p-3 text-sm border rounded-lg bg-white" value={newDocente.rol} onChange={e => setNewDocente({...newDocente, rol: e.target.value, detalle: ""})}>{Object.values(ROLES).map(r => <option key={r} value={r}>{r}</option>)}</select></div>
-                                                <div className="md:col-span-3"><label className="block text-xs font-bold text-slate-500 mb-1">Detalle</label>
-                                                    {newDocente.rol === ROLES.TUTOR ? <select className="w-full p-3 text-sm border rounded-lg bg-white" value={newDocente.detalle} onChange={e => setNewDocente({...newDocente, detalle: e.target.value})}><option value="">-- Grado --</option>{GRADOS_TUTORIA.map(g => <option key={g} value={g}>{g}</option>)}</select> : 
-                                                     newDocente.rol === ROLES.AREA ? <select className="w-full p-3 text-sm border rounded-lg bg-white" value={newDocente.detalle} onChange={e => setNewDocente({...newDocente, detalle: e.target.value})}><option value="">-- Área --</option>{AREAS_CURRICULARES.map(a => <option key={a} value={a}>{a}</option>)}</select> : 
-                                                     <input required type="text" className="w-full p-3 text-sm border rounded-lg" value={newDocente.detalle} onChange={e => setNewDocente({...newDocente, detalle: e.target.value})} />}
+                                                
+                                                <div className="md:col-span-4">
+                                                    <label className="block text-xs font-bold text-slate-500 mb-1">Roles Asignados</label>
+                                                    <div className="flex flex-col gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                                        {Object.values(ROLES_KEYS).map(role => (
+                                                            <label key={role} className="flex items-center text-sm cursor-pointer">
+                                                                <input type="checkbox" className="mr-2 h-4 w-4 text-blue-600" checked={newDocente.roles.includes(role)} onChange={() => toggleNewDocenteRole(role)} />
+                                                                {role}
+                                                            </label>
+                                                        ))}
+                                                    </div>
                                                 </div>
-                                                <div className="md:col-span-2"><button type="submit" className="w-full bg-blue-600 text-white p-3 rounded-lg font-bold">+ Agregar</button></div>
+
+                                                <div className="md:col-span-4"><label className="block text-xs font-bold text-slate-500 mb-1">Detalle (Grado/Área)</label>
+                                                    <input required type="text" className="w-full p-3 text-sm border rounded-lg" placeholder="Ej. 5to A - Matemática" value={newDocente.detalle} onChange={e => setNewDocente({...newDocente, detalle: e.target.value})} />
+                                                </div>
+                                                <div className="md:col-span-12 flex justify-end mt-4"><button type="submit" className="w-full md:w-auto bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 transition">+ Registrar Docente</button></div>
                                             </form>
                                         )}
                                     </Card>
-                                    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm"><table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500"><tr><th className="px-8 py-4">Docente</th><th className="px-8 py-4">Rol</th><th className="px-8 py-4">Detalle</th><th className="px-8 py-4 text-right">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{docentes.map(d => (<tr key={d.id} className="hover:bg-blue-50/30"><td className="px-8 py-4 font-bold">{d.nombre}</td><td className="px-8 py-4"><Badge type="blue">{d.rol}</Badge></td><td className="px-8 py-4 text-slate-600">{d.detalle}</td><td className="px-8 py-4 text-right"><button onClick={() => handleDeleteDocente(d.id)} className="text-slate-400 hover:text-red-600"><Icons.Trash2 className="w-4 h-4"/></button></td></tr>))}</tbody></table></div>
+                                    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm"><table className="w-full text-sm text-left"><thead className="bg-slate-50 text-slate-500"><tr><th className="px-8 py-4">Docente</th><th className="px-8 py-4">Roles</th><th className="px-8 py-4">Detalle</th><th className="px-8 py-4 text-right">Acciones</th></tr></thead><tbody className="divide-y divide-slate-100">{docentes.map(d => (<tr key={d.id} className="hover:bg-blue-50/30"><td className="px-8 py-4 font-bold">{d.nombre}</td><td className="px-8 py-4 flex flex-col gap-1">{getTeacherRoles(d).map(r => <span key={r} className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded w-fit">{r}</span>)}</td><td className="px-8 py-4 text-slate-600">{d.detalle}</td><td className="px-8 py-4 text-right"><button onClick={() => handleDeleteDocente(d.id)} className="text-slate-400 hover:text-red-600"><Icons.Trash2 className="w-4 h-4"/></button></td></tr>))}</tbody></table></div>
                                 </div>
                             )}
                         </div>
