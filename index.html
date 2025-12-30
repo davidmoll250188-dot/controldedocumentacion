@@ -5,18 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Seguimiento Docente</title>
     
-    <!-- 1. Carga de Librerías Estables (CDN) -->
+    <!-- 1. CARGA DE LIBRERÍAS (Modo Compatible) -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React y ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Dependencias de Gráficos -->
     <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
     <script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.min.js"></script>
+    
+    <!-- Compilador Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- 2. FIREBASE (Versión Compat - Más estable para HTML sueltos) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 
     <style>
         body { background-color: #f8fafc; font-family: 'Segoe UI', sans-serif; }
         .animate-fade-in { animation: fadeIn 0.5s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
         /* Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; }
@@ -27,36 +39,42 @@
             .no-print { display: none !important; }
             .print-only { display: block !important; }
             body { background: white; }
+            .card { break-inside: avoid; }
         }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <!-- 2. Módulo de Firebase -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-
-        // Exponer módulos al entorno global para React
-        window.FirebaseMods = {
-            initializeApp, getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot,
-            getAuth, signInAnonymously, onAuthStateChanged
-        };
-        // Señal para iniciar la app
-        window.dispatchEvent(new Event('firebase-ready'));
-    </script>
-
-    <!-- 3. Aplicación React -->
+    <!-- 3. Lógica de la Aplicación -->
     <script type="text/babel">
-        // --- ICONOS (Lucide SVG) ---
+        // --- 1. CONFIGURACIÓN DE FIREBASE (Inicialización Directa) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBZBFUrU6rAAcpDXKetsH3eT2XyZQ2e3Rg",
+            authDomain: "control-docentes.firebaseapp.com",
+            projectId: "control-docentes",
+            storageBucket: "control-docentes.firebasestorage.app",
+            messagingSenderId: "759330033292",
+            appId: "1:759330033292:web:ed0bcf6487779b184e75a9"
+        };
+
+        // Inicializar si no existe
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        // --- 2. COMPONENTES E ICONOS ---
+        
         const Icon = ({ d, className, ...props }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>
                 {Array.isArray(d) ? d.map((path, i) => <path key={i} d={path} />) : <path d={d} />}
             </svg>
         );
 
+        // Iconos Lucide simplificados
         const Icons = {
             FileCheck: (p) => <Icon d={["M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z", "M14 2v6h6", "m9 15 2 2 4-4"]} {...p} />,
             PieChart: (p) => <Icon d={["M21.21 15.89A10 10 0 1 1 8 2.83", "M22 12A10 10 0 0 0 12 2v10z"]} {...p} />,
@@ -83,16 +101,14 @@
             WifiOff: (p) => <Icon d={["M1 1l22 22", "M16.72 11.06A10.94 10.94 0 0 1 19 12.55", "M5 12.55a10.94 10.94 0 0 1 5.17-2.39", "M10.71 5.05A16 16 0 0 1 22.58 9", "M1.42 9a15.91 15.91 0 0 1 4.7-2.88", "M8.53 16.11a6 6 0 0 1 6.95 0", "M12 20h.01"]} {...p} />
         };
 
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect } = React;
         const RechartsObj = window.Recharts || {};
         const { PieChart, Pie, Cell, ResponsiveContainer } = RechartsObj;
 
-        // --- DATOS Y CONSTANTES ---
+        // --- DATA ---
         const ROLES_KEYS = { TUTOR: "Docente Tutor", AREA: "Docente Área a Cargo", REGENCIA: "Regencia" };
-        
         const GRADOS_TUTORIA = ["Inicial 3 años", "Inicial 4 años", "Inicial 5 años", "Primero Primaria", "Segundo Primaria", "Tercero Primaria", "Cuarto Primaria", "Quinto Primaria", "Sexto Primaria", "Primero Secundaria", "Segundo Secundaria", "Tercero Secundaria", "Cuarto Secundaria", "Quinto Secundaria"];
         const AREAS_CURRICULARES = ["EPT", "Matemática", "Comunicación", "Ciencia y Tecnología", "Religión", "DPCYC", "Ciencias Sociales", "Personal Social", "Ed. Física", "Arte", "Inglés"];
-        
         const DOCS_POSIBLES = [
             "Carátula", "Registro de estudiantes", "Asistencia", "Llenado de: (competencias, capacidades, desempeños y criterios)", 
             "Llenado de conclusiones descriptivas", "Llenado de comportamiento", "Llenado de apreciación del tutor",
@@ -100,8 +116,6 @@
             "Registro de HSE y FR", "Informe de HSE y FR", "Informe de Nivel de Logro de Competencia", "Inventario", 
             "Informe de Estudiantes con R.R.", "Informe de Estudiantes con P.G.", "Informe de Tutoría"
         ];
-
-        // Definición de Reglas de Negocio
         const REGLAS_ASIGNACION = {
             [ROLES_KEYS.TUTOR]: { docs: DOCS_POSIBLES },
             [ROLES_KEYS.AREA]: { docs: ["Llenado de: (competencias, capacidades, desempeños y criterios)", "Llenado de conclusiones descriptivas", "Formato Oficial de Notas (SIAGIE)", "Conclusiones Descriptivas (SIAGIE)"] },
@@ -111,7 +125,7 @@
         const Card = ({ children, className = "" }) => <div className={`bg-white rounded-xl shadow-sm border border-slate-200 ${className}`}>{children}</div>;
         const Badge = ({ children, type = "neutral" }) => <span className={`px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 mr-1`}>{children}</span>;
 
-        // Componente: Grupo de Checklist
+        // Componentes UI
         const ChecklistGroup = ({ title, items, docente, requiredItems, onToggle, onUpdateObs, onUpdatePercent }) => {
             const relevantItems = items.filter(item => requiredItems.includes(item));
             if (!relevantItems.length) return null;
@@ -131,14 +145,14 @@
                                 <div key={idx} className={`rounded-lg border-2 transition-all duration-200 ${isChecked ? 'bg-emerald-50/30 border-emerald-400' : 'bg-white border-slate-200 hover:border-blue-300'}`}>
                                     <div className="flex flex-col md:flex-row md:items-start p-4 gap-4">
                                         <div className="flex items-start flex-1">
-                                            <div onClick={() => onToggle(docente.id, docName)} className={`mt-1 flex-shrink-0 cursor-pointer w-8 h-8 rounded-full flex items-center justify-center mr-4 transition-all shadow-sm ${isChecked ? 'bg-emerald-500 text-white scale-110' : 'bg-slate-100 text-slate-300 border border-slate-300 hover:bg-white'}`}>
+                                            <div onClick={() => onToggle(docente.id, docName)} className={`mt-1 flex-shrink-0 cursor-pointer w-8 h-8 rounded-full flex items-center justify-center mr-4 transition-all shadow-sm ${isChecked ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-300 border border-slate-300 hover:bg-white'}`}>
                                                 {isChecked && <Icons.CheckSquare className="w-5 h-5" />}
                                             </div>
                                             <div className="flex-1">
                                                 <div className="cursor-pointer font-medium text-slate-800" onClick={() => onToggle(docente.id, docName)}>{docName}</div>
                                                 {(isChecked && hasObs) && (
                                                     <div className="mt-2 flex items-center animate-fade-in bg-white/50 p-2 rounded-lg">
-                                                        <span className="text-xs font-bold text-slate-500 mr-2 uppercase">Calificación:</span>
+                                                        <span className="text-xs font-bold text-slate-500 mr-2 uppercase">Calif:</span>
                                                         <input type="range" min="0" max="100" value={currentPercent} onChange={(e) => onUpdatePercent(docente.id, docName, parseInt(e.target.value))} className="w-32 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 mr-2" />
                                                         <span className={`text-xs font-bold px-2 py-0.5 rounded ${currentPercent < 100 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{currentPercent}%</span>
                                                     </div>
@@ -161,16 +175,7 @@
 
         const ChartCard = ({ title, percent, color }) => {
             const data = [{ name: 'Completado', value: percent }, { name: 'Pendiente', value: 100 - percent }];
-            
-            if (!PieChart || !ResponsiveContainer) {
-                return (
-                    <Card className="p-6 flex flex-col items-center justify-center h-48">
-                        <h3 className="text-sm font-bold text-slate-500 mb-4">{title}</h3>
-                        <div className="text-4xl font-black text-slate-700">{percent}%</div>
-                    </Card>
-                );
-            }
-
+            if (!PieChart || !ResponsiveContainer) return <Card className="p-6 flex flex-col items-center justify-center h-48"><h3 className="text-sm font-bold text-slate-500 mb-4">{title}</h3><div className="text-4xl font-black text-slate-700">{percent}%</div></Card>;
             return (
                 <Card className="p-6 flex flex-col items-center justify-center overflow-hidden">
                     <h3 className="text-sm font-bold text-slate-500 mb-4 z-10">{title}</h3>
@@ -216,8 +221,8 @@
             );
         };
 
+        // --- APP PRINCIPAL ---
         const App = () => {
-            // Estados
             const [user, setUser] = useState(null);
             const [docentes, setDocentes] = useState([]);
             const [isLoading, setIsLoading] = useState(true);
@@ -233,38 +238,28 @@
             const [selectedRoleView, setSelectedRoleView] = useState("ALL"); 
 
             const [newDocente, setNewDocente] = useState({ nombre: "", roles: [], detalle: "" });
-            
-            const [services, setServices] = useState(null);
 
             useEffect(() => {
                 const handleOnline = () => setIsOnline(true);
                 const handleOffline = () => setIsOnline(false);
                 window.addEventListener('online', handleOnline);
                 window.addEventListener('offline', handleOffline);
-                
-                const checkFirebase = () => {
-                    if (window.AppServices) {
-                        setServices(window.AppServices);
-                        
-                        const { auth, ops } = window.AppServices;
-                        ops.signInAnonymously(auth).catch(err => {
-                            console.error("Auth Error:", err);
-                            // No bloqueamos, solo avisamos
-                        });
 
-                        ops.onAuthStateChanged(auth, (u) => {
+                const initAuth = async () => {
+                    try {
+                        // Auth Anónima
+                        await auth.signInAnonymously();
+                        auth.onAuthStateChanged((u) => {
                             setUser(u);
-                            // Quitamos loading incluso si no hay user, la app reintentará
-                            setIsLoading(false);
+                            if (u) setIsLoading(false);
                         });
-                    } else if (window.firebaseError) {
-                        setErrorMsg("Error iniciando Firebase: " + window.firebaseError);
+                    } catch (err) {
+                        console.error("Auth Error:", err);
+                        setErrorMsg("Error de autenticación. Verifica la consola.");
                         setIsLoading(false);
-                    } else {
-                        setTimeout(checkFirebase, 500);
                     }
                 };
-                checkFirebase();
+                initAuth();
 
                 return () => {
                     window.removeEventListener('online', handleOnline);
@@ -272,12 +267,12 @@
                 };
             }, []);
 
-            // Listener de Datos
+            // Listener de Datos (Firestore)
             useEffect(() => {
-                if (!services) return;
-                const { db, ops } = services;
+                if (!user) return;
                 
-                const unsubscribe = ops.onSnapshot(ops.collection(db, 'docentes'), 
+                // Colección 'docentes'
+                const unsubscribe = db.collection('docentes').onSnapshot(
                     (snapshot) => {
                         const docsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                         docsData.sort((a, b) => a.nombre.localeCompare(b.nombre));
@@ -287,18 +282,18 @@
                     }, 
                     (err) => {
                         console.error("Snapshot Error:", err);
-                        // Solo mostramos error si realmente falla la carga inicial
-                        if (docentes.length === 0) {
-                            if (err.code === 'permission-denied') setErrorMsg("Permiso denegado. Revisa reglas Firestore.");
-                            else setErrorMsg("Error de datos: " + err.message);
+                        if (err.code === 'permission-denied') {
+                            setErrorMsg("Permiso denegado. Revisa las reglas de seguridad de Firebase Firestore.");
+                        } else {
+                            setErrorMsg("Error de datos: " + err.message);
                         }
                         setIsLoading(false);
                     }
                 );
                 return () => unsubscribe();
-            }, [services]);
+            }, [user]);
 
-            // --- LÓGICA ---
+            // --- UTILS ---
             const getTeacherRoles = (d) => {
                 if (!d) return [];
                 if (Array.isArray(d.roles) && d.roles.length > 0) return d.roles;
@@ -332,20 +327,17 @@
                 return Math.round(sumPercentages / requiredDocs.length);
             };
 
-            // --- HANDLERS ---
-            const handleRefresh = () => {
-                window.location.reload();
-            };
+            // --- ACCIONES ---
+            const handleRefresh = () => window.location.reload();
 
             const handleAddDocente = async (e) => {
                 e.preventDefault();
-                if (!services) return alert("Sin conexión");
+                if (!db) return alert("Sin conexión");
                 if (!newDocente.nombre.trim()) return alert("Nombre requerido");
                 if (newDocente.roles.length === 0) return alert("Seleccione al menos un rol");
 
-                const { db, ops } = services;
                 try {
-                    await ops.addDoc(ops.collection(db, 'docentes'), {
+                    await db.collection('docentes').add({
                         nombre: newDocente.nombre, 
                         roles: newDocente.roles, 
                         rol: newDocente.roles[0], 
@@ -361,16 +353,13 @@
             const toggleNewDocenteRole = (role) => {
                 setNewDocente(prev => {
                     const exists = prev.roles.includes(role);
-                    const newRoles = exists 
-                        ? prev.roles.filter(r => r !== role) 
-                        : [...prev.roles, role];
+                    const newRoles = exists ? prev.roles.filter(r => r !== role) : [...prev.roles, role];
                     return { ...prev, roles: newRoles };
                 });
             };
 
             const handleImportarDocentes = async () => {
-                if (!services || !importText.trim()) return;
-                const { db, ops } = services;
+                if (!importText.trim()) return;
                 const lineas = importText.split('\n');
                 let count = 0;
                 
@@ -382,7 +371,7 @@
                         if (rStr.includes("área") || rStr.includes("area")) roles = [ROLES_KEYS.AREA];
                         if (rStr.includes("regencia")) roles = [ROLES_KEYS.REGENCIA];
                         
-                        await ops.addDoc(ops.collection(db, 'docentes'), {
+                        await db.collection('docentes').add({
                             nombre: parts[0].trim(), roles: roles, rol: roles[0],
                             detalle: parts[2]?.trim() || "Sin asignar", documentos: {}, createdAt: new Date().toISOString()
                         });
@@ -394,9 +383,7 @@
             };
 
             const updateDocenteData = async (id, newData) => {
-                if (!services) return;
-                const { db, ops } = services;
-                try { await ops.updateDoc(ops.doc(db, 'docentes', id), { documentos: newData }); } catch(e) { console.error(e); }
+                try { await db.collection('docentes').doc(id).update({ documentos: newData }); } catch(e) { console.error(e); }
             };
 
             const toggleDocumento = (id, docName) => {
@@ -420,8 +407,7 @@
 
             const handleDeleteDocente = async (id) => {
                 if(confirm("¿Eliminar registro?")) {
-                    const { db, ops } = services;
-                    await ops.deleteDoc(ops.doc(db, 'docentes', id));
+                    await db.collection('docentes').doc(id).delete();
                     if(selectedDashboardId === id) setSelectedDashboardId("");
                 }
             };
@@ -449,9 +435,10 @@
                 w.document.close();
             };
 
-            // --- RENDER ---
+            // UI
             if (isLoading) return <div className="flex h-screen items-center justify-center text-slate-500 font-bold flex-col bg-slate-50"><Icons.Loader2 className="animate-spin w-12 h-12 mb-4 text-blue-600"/><p>Conectando...</p></div>;
-            
+            if (errorMsg) return <div className="flex h-screen items-center justify-center text-red-500 font-bold p-10 text-center flex-col"><Icons.AlertCircle className="w-16 h-16 mb-4"/><h2 className="text-xl mb-2">Aviso del Sistema</h2><p className="font-normal text-sm mb-4 bg-red-50 p-4 rounded border border-red-100">{errorMsg}</p><button onClick={()=>window.location.reload()} className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">Reintentar</button></div>;
+
             const docenteSeleccionado = docentes.find(d => String(d.id) === String(selectedDashboardId));
             const activeRoles = getTeacherRoles(docenteSeleccionado);
             const progresoTotal = docenteSeleccionado ? calcularProgreso(docenteSeleccionado, selectedRoleView) : 0;
@@ -463,7 +450,6 @@
                             <div className="flex items-center">
                                 <Icons.FileCheck className="w-8 h-8 mr-2 text-blue-400" />
                                 <span className="font-bold text-xl hidden md:inline">DOCENTE<span className="text-blue-400">CHECK</span></span>
-                                {/* INDICADOR DE ESTADO */}
                                 <div className={`ml-4 flex items-center text-xs font-bold px-3 py-1 rounded-full ${isOnline ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
                                     {isOnline ? <Icons.Wifi className="w-3 h-3 mr-1"/> : <Icons.WifiOff className="w-3 h-3 mr-1"/>}
                                     {isOnline ? 'CONECTADO' : 'OFFLINE'}
@@ -484,8 +470,6 @@
                     
                     <main className="flex-1 overflow-auto bg-slate-50 p-4 md:p-8">
                         <div className="max-w-7xl mx-auto pb-20">
-                            {errorMsg && <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert"><strong className="font-bold">Error: </strong><span className="block sm:inline">{errorMsg}</span></div>}
-                            
                             {activeTab === 'dashboard' ? (
                                 <div className="animate-fade-in space-y-6">
                                     <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
@@ -556,7 +540,6 @@
                                         ) : (
                                             <form onSubmit={handleAddDocente} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                                                 <div className="md:col-span-4"><label className="block text-xs font-bold text-slate-500 mb-1">Nombre</label><input required type="text" className="w-full p-3 text-sm border rounded-lg" value={newDocente.nombre} onChange={e => setNewDocente({...newDocente, nombre: e.target.value})} /></div>
-                                                
                                                 <div className="md:col-span-4">
                                                     <label className="block text-xs font-bold text-slate-500 mb-1">Roles Asignados</label>
                                                     <div className="flex flex-col gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
@@ -568,11 +551,10 @@
                                                         ))}
                                                     </div>
                                                 </div>
-
                                                 <div className="md:col-span-4"><label className="block text-xs font-bold text-slate-500 mb-1">Detalle (Grado/Área)</label>
                                                     <input required type="text" className="w-full p-3 text-sm border rounded-lg" placeholder="Ej. 5to A - Matemática" value={newDocente.detalle} onChange={e => setNewDocente({...newDocente, detalle: e.target.value})} />
                                                 </div>
-                                                <div className="md:col-span-12 flex justify-end mt-4"><button type="submit" className="w-full md:w-auto bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 transition">+ Registrar Docente</button></div>
+                                                <div className="md:col-span-12 flex justify-end mt-4"><button type="submit" className="w-full md:w-auto bg-blue-600 text-white px-8 py-3 rounded-lg font-bold">+ Registrar Docente</button></div>
                                             </form>
                                         )}
                                     </Card>
