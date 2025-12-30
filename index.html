@@ -234,21 +234,39 @@
                             const firestore = window.FirebaseMods.getFirestore(app);
                             setDb(firestore);
 
+                            // Autenticación Anónima con Timeout de seguridad
                             const doAuth = async () => {
                                 try {
+                                    // Intentamos loguear anónimamente
                                     await window.FirebaseMods.signInAnonymously(auth);
                                 } catch (authErr) {
                                     console.error("Auth Error:", authErr);
-                                    setErrorMsg("Error Auth: " + authErr.message);
+                                    // NO bloqueamos la app, solo mostramos error y permitimos reintentar
+                                    setErrorMsg("Error de autenticación: " + authErr.message + ". Verifica que 'Anonymous auth' esté habilitado.");
                                     setIsLoading(false);
                                 }
                             };
                             doAuth();
 
+                            // Listener de estado
                             window.FirebaseMods.onAuthStateChanged(auth, (u) => {
                                 setUser(u);
-                                if (u) setIsLoading(false);
+                                if (u) {
+                                    setIsLoading(false); // Usuario autenticado -> quitar loading
+                                }
                             });
+
+                            // SAFETY TIMEOUT: Si en 5 segundos no conecta, forzar salida de loading
+                            setTimeout(() => {
+                                setIsLoading((prev) => {
+                                    if (prev) {
+                                        console.warn("Tiempo de espera agotado. Forzando fin de carga.");
+                                        setErrorMsg("Tiempo de espera agotado. Revisa tu conexión.");
+                                        return false; 
+                                    }
+                                    return prev;
+                                });
+                            }, 5000);
 
                         } catch (e) {
                             console.error("Init Error:", e);
@@ -259,7 +277,7 @@
                         attempts++;
                         if(attempts < 50) setTimeout(init, 100);
                         else {
-                            setErrorMsg("No se pudo cargar Firebase.");
+                            setErrorMsg("No se pudieron cargar las librerías de Firebase.");
                             setIsLoading(false);
                         }
                     }
@@ -279,12 +297,17 @@
                         const docsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                         docsData.sort((a, b) => a.nombre.localeCompare(b.nombre));
                         setDocentes(docsData);
-                        setIsLoading(false);
+                        setIsLoading(false); // Asegurar que quite loading al recibir datos
                         setErrorMsg(""); 
                     }, 
                     (err) => {
                         console.error("Snapshot Error:", err);
-                        setErrorMsg("Error de datos: " + err.message);
+                        // Mensaje amigable si fallan los permisos
+                        if (err.code === 'permission-denied') {
+                            setErrorMsg("Permiso denegado. Verifica las reglas de Firestore (deben estar en modo 'test' o permitir lectura/escritura).");
+                        } else {
+                            setErrorMsg("Error de datos: " + err.message);
+                        }
                         setIsLoading(false);
                     }
                 );
@@ -294,7 +317,7 @@
             // Handlers
             const handleAddDocente = async (e) => {
                 e.preventDefault();
-                if (!user) return alert("Sin conexión");
+                if (!user) return alert("Sin conexión o permisos insuficientes.");
                 if (!newDocente.nombre.trim()) return alert("Nombre requerido");
                 const { addDoc, collection } = window.FirebaseMods;
                 try {
@@ -303,7 +326,7 @@
                     });
                     setNewDocente({ nombre: "", rol: ROLES.TUTOR, detalle: "" });
                     alert("Docente registrado.");
-                } catch(e) { console.error(e); alert("Error al guardar"); }
+                } catch(e) { console.error(e); alert("Error al guardar: " + e.message); }
             };
 
             const handleImportarDocentes = async () => {
@@ -396,8 +419,16 @@
                 w.document.close();
             };
 
-            if (isLoading) return <div className="flex h-screen items-center justify-center text-slate-500 font-bold"><Icons.Loader2 className="animate-spin mr-2"/> Cargando...</div>;
-            if (errorMsg) return <div className="flex h-screen items-center justify-center text-red-500 font-bold p-10 text-center"><Icons.AlertCircle className="mr-2"/> {errorMsg} <br/><button onClick={()=>window.location.reload()} className="mt-4 underline">Recargar</button></div>;
+            if (isLoading) return <div className="flex h-screen items-center justify-center text-slate-500 font-bold flex-col bg-slate-50"><Icons.Loader2 className="animate-spin w-12 h-12 mb-4 text-blue-600"/><p>Conectando...</p></div>;
+            
+            if (errorMsg) return (
+                <div className="flex h-screen items-center justify-center text-red-500 font-bold p-10 text-center flex-col">
+                    <Icons.AlertCircle className="w-16 h-16 mb-4"/>
+                    <h2 className="text-xl mb-2">Error de Conexión</h2>
+                    <p className="font-normal text-sm mb-4 bg-red-50 p-4 rounded border border-red-100">{errorMsg}</p>
+                    <button onClick={()=>window.location.reload()} className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">Reintentar</button>
+                </div>
+            );
 
             const docenteSeleccionado = docentes.find(d => String(d.id) === String(selectedDashboardId));
             const progresoTotal = docenteSeleccionado ? calcularProgreso(docenteSeleccionado) : 0;
